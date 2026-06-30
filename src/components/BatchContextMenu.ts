@@ -1,6 +1,10 @@
 import { Menu, Notice, TFile, type MenuItem } from "obsidian";
 import TaskNotesPlugin from "../main";
 import { TaskInfo } from "../types";
+import {
+	createCustomPriorityFromMenu,
+	removeCustomPriorityFromMenu,
+} from "../modals/PriorityCreationModal";
 import { DateContextMenu, type DateOption } from "./DateContextMenu";
 import { ContextMenu } from "./ContextMenu";
 import { showConfirmationModal } from "../modals/ConfirmationModal";
@@ -276,6 +280,25 @@ export class BatchContextMenu {
 		}
 
 		// Add option to clear priority
+		submenu.addSeparator();
+		submenu.addItem((item) => {
+			item.setTitle("Add custom priority...");
+			item.setIcon("plus");
+			item.onClick(async () => {
+				const priority = await createCustomPriorityFromMenu(this.options.plugin);
+				if (priority) {
+					await this.batchUpdateProperty("priority", priority.value);
+				}
+			});
+		});
+		submenu.addItem((item) => {
+			item.setTitle("Remove custom priority...");
+			item.setIcon("trash");
+			item.onClick(async () => {
+				await removeCustomPriorityFromMenu(this.options.plugin);
+			});
+		});
+
 		submenu.addSeparator();
 		submenu.addItem((item) => {
 			item.setTitle(this.t("contextMenus.priority.clearPriority"));

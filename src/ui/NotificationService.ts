@@ -1,4 +1,4 @@
-import { TFile, EventRef } from "obsidian";
+import { TFile, EventRef, Modal, Notice, normalizePath } from "obsidian";
 import TaskNotesPlugin from "../main";
 import { TaskInfo, Reminder, EVENT_TASK_UPDATED } from "../types";
 import { parseDateToLocal } from "../utils/dateUtils";
@@ -13,6 +13,176 @@ interface NotificationQueueItem {
 	notifyAt: number;
 }
 
+type ReminderMediaElement = HTMLAudioElement | HTMLVideoElement;
+
+class ReminderMediaModal extends Modal {
+	private mediaElements: ReminderMediaElement[] = [];
+
+	constructor(
+		private plugin: TaskNotesPlugin,
+		private task: TaskInfo,
+		private reminder: Reminder,
+		private message: string,
+		private onDismiss: () => void
+	) {
+		super(plugin.app);
+	}
+
+	isForTask(taskPath: string): boolean {
+		return this.task.path === taskPath;
+	}
+
+	onOpen(): void {
+		const { contentEl, modalEl } = this;
+		contentEl.empty();
+		modalEl.addClass("tasknotes-reminder-media-modal");
+		contentEl.addClass("tasknotes-reminder-media-modal__content");
+
+		const alert = this.reminder.alert;
+		const title = this.task.title || "TaskNotes Reminder";
+
+		const header = contentEl.createDiv({ cls: "tasknotes-reminder-media-modal__header" });
+		header.createEl("h2", { text: title });
+		header.createEl("p", { text: alert?.note || this.message });
+
+		const mediaContainer = contentEl.createDiv({
+			cls: "tasknotes-reminder-media-modal__media",
+		});
+
+		if (alert?.video) {
+			const video = mediaContainer.createEl("video");
+			const resolvedVideo = this.resolveMediaPath(alert.video);
+			if (!resolvedVideo) {
+				mediaContainer.createDiv({
+					cls: "tasknotes-reminder-media-modal__error",
+					text: `Video file not found: ${alert.video}`,
+				});
+			} else {
+				video.src = resolvedVideo;
+			}
+			video.controls = true;
+			video.autoplay = true;
+			video.muted = false;
+			video.playsInline = true;
+			video.loop = alert.audioLoop === true && alert.audioUntil === "dismiss";
+			this.mediaElements.push(video);
+			void this.playVideoWithAutoplayFallback(video);
+		}
+
+		if (alert?.audio) {
+			const audio = mediaContainer.createEl("audio");
+			const resolvedAudio = this.resolveMediaPath(alert.audio);
+			if (!resolvedAudio) {
+				mediaContainer.createDiv({
+					cls: "tasknotes-reminder-media-modal__error",
+					text: `Audio file not found: ${alert.audio}`,
+				});
+			} else {
+				audio.src = resolvedAudio;
+			}
+			audio.controls = true;
+			audio.autoplay = true;
+			audio.loop = alert.audioLoop === true && alert.audioUntil === "dismiss";
+			this.mediaElements.push(audio);
+			void audio.play().catch(() => {
+				new Notice("Click play to start reminder audio");
+			});
+		}
+
+		const actions = contentEl.createDiv({ cls: "tasknotes-reminder-media-modal__actions" });
+		const playButton = actions.createEl("button", { text: "Play media" });
+		playButton.addEventListener("click", () => {
+			for (const media of this.mediaElements) {
+				if (media instanceof HTMLVideoElement) {
+					media.muted = false;
+				}
+				void media.play();
+			}
+		});
+
+		const openButton = actions.createEl("button", { text: "Open task" });
+		openButton.addEventListener("click", () => {
+			void this.plugin.app.workspace.openLinkText(this.task.path, "", false);
+		});
+
+		const dismissButton = actions.createEl("button", {
+			text: "Dismiss",
+			cls: "mod-cta",
+		});
+		dismissButton.addEventListener("click", () => this.close());
+
+		this.scope.register([], "Escape", () => {
+			this.close();
+		});
+	}
+
+	private async playVideoWithAutoplayFallback(video: HTMLVideoElement): Promise<void> {
+		try {
+			video.muted = false;
+			await video.play();
+		} catch {
+			try {
+				video.muted = true;
+				await video.play();
+				new Notice("Reminder video started muted. Click play media to unmute.");
+			} catch {
+				new Notice("Click play to start reminder video");
+			}
+		}
+	}
+
+	onClose(): void {
+		for (const media of this.mediaElements) {
+			media.pause();
+			media.removeAttribute("src");
+			media.load();
+		}
+		this.mediaElements = [];
+		this.contentEl.empty();
+		this.onDismiss();
+	}
+
+	private resolveMediaPath(path: string): string | null {
+		if (/^(app|file|https?):\/\//i.test(path)) {
+			return path;
+		}
+
+		const normalizedPath = normalizePath(path);
+		const file = this.getMediaFile(normalizedPath);
+		if (file instanceof TFile) {
+			return this.plugin.app.vault.getResourcePath(file);
+		}
+
+		return null;
+	}
+
+	private getMediaFile(normalizedPath: string) {
+		const exactFile = this.plugin.app.vault.getAbstractFileByPath(normalizedPath);
+		if (exactFile instanceof TFile) {
+			return exactFile;
+		}
+
+		const filename = normalizedPath.split("/").pop();
+		if (!filename) {
+			return null;
+		}
+
+		const candidatePaths = [
+			`(Calendar/TaskNotes Companion/Media/${filename}`,
+			`TaskNotes Companion/Media/${filename}`,
+		];
+
+		for (const candidatePath of candidatePaths) {
+			const candidateFile = this.plugin.app.vault.getAbstractFileByPath(candidatePath);
+			if (candidateFile instanceof TFile) {
+				return candidateFile;
+			}
+		}
+
+		return null;
+	}
+}
+
 export class NotificationService {
 	private plugin: TaskNotesPlugin;
 	private notificationQueue: NotificationQueueItem[] = [];
@@ -23,6 +193,7 @@ export class NotificationService {
 	private fileUpdateListener?: EventRef;
 	private activeAudioContexts: Set<AudioContext> = new Set();
 	private audioCleanupTimeouts: Set<number> = new Set();
+	private activeMediaModals: Set<ReminderMediaModal> = new Set();
 	private lastBroadScanTime: number = Date.now();
 	private lastQuickCheckTime: number = Date.now();
 
@@ -85,6 +256,10 @@ export class NotificationService {
 			}
 		}
 		this.activeAudioContexts.clear();
+		for (const modal of this.activeMediaModals) {
+			modal.close();
+		}
+		this.activeMediaModals.clear();
 		this.notificationQueue = [];
 		this.processedReminders.clear();
 	}
@@ -133,6 +308,10 @@ export class NotificationService {
 		const windowEnd = now + this.QUEUE_WINDOW;
 
 		for (const task of tasks) {
+			if (this.isTaskCompleted(task)) {
+				continue;
+			}
+
 			if (!task.reminders || task.reminders.length === 0) {
 				continue;
 			}
@@ -278,11 +457,15 @@ export class NotificationService {
 			this.plugin.settings.storeTitleInFilename
 		) as TaskInfo;
 
+		const reminder =
+			task.reminders?.find((taskReminder) => taskReminder.id === item.reminder.id) ??
+			item.reminder;
+
 		// Generate notification message
-		const message =
-			item.reminder.description || this.generateDefaultMessage(task, item.reminder);
+		const message = reminder.description || this.generateDefaultMessage(task, reminder);
 
 		this.playNotificationSound();
+		this.playReminderMedia(task, reminder, message);
 
 		if (this.plugin.settings.notificationType === "system") {
 			// System notification
@@ -310,12 +493,32 @@ export class NotificationService {
 		if (this.plugin.apiService) {
 			await this.plugin.apiService.triggerWebhook("reminder.triggered", {
 				task,
-				reminder: item.reminder,
+				reminder,
 				notificationTime: new Date(item.notifyAt).toISOString(),
 				message,
 				notificationType: this.plugin.settings.notificationType,
 			});
 		}
+	}
+
+	private playReminderMedia(task: TaskInfo, reminder: Reminder, message: string): void {
+		const alert = reminder.alert;
+		if (!alert?.video && !alert?.audio) {
+			return;
+		}
+
+		if (alert.allowOverlay === false) {
+			for (const modal of this.activeMediaModals) {
+				modal.close();
+			}
+			this.activeMediaModals.clear();
+		}
+
+		const modal = new ReminderMediaModal(this.plugin, task, reminder, message, () => {
+			this.activeMediaModals.delete(modal);
+		});
+		this.activeMediaModals.add(modal);
+		modal.open();
 	}
 
 	playNotificationSound(): void {
@@ -477,6 +680,10 @@ export class NotificationService {
 		const now = Date.now();
 		const windowEnd = now + this.QUEUE_WINDOW;
 
+		if (this.isTaskCompleted(task)) {
+			return;
+		}
+
 		if (!task.reminders || task.reminders.length === 0) {
 			return;
 		}
@@ -517,6 +724,11 @@ export class NotificationService {
 				: updatedTask;
 
 		if (!task) {
+			return;
+		}
+
+		if (this.isTaskCompleted(task)) {
+			this.closeMediaModalsForTask(taskPath);
 			return;
 		}
 
@@ -564,6 +776,18 @@ export class NotificationService {
 		this.notificationQueue = this.notificationQueue.filter(
 			(item) => item.taskPath !== taskPath
 		);
+	}
+
+	private closeMediaModalsForTask(taskPath: string): void {
+		for (const modal of Array.from(this.activeMediaModals)) {
+			if (modal.isForTask(taskPath)) {
+				modal.close();
+			}
+		}
+	}
+
+	private isTaskCompleted(task: TaskInfo): boolean {
+		return this.plugin.statusManager?.isCompletedStatus(task.status) ?? task.status === "done";
 	}
 
 	private async handleSystemWakeUp(): Promise<void> {

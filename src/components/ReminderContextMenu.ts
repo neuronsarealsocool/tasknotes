@@ -39,6 +39,15 @@ export class ReminderContextMenu {
 
 		menu.addSeparator();
 
+		// Media reminders
+		menu.addItem((item) => {
+			item.setTitle("Add reminder with media...")
+				.setIcon("file-video")
+				.onClick(() => {
+					this.openReminderModal();
+				});
+		});
+
 		// Manage reminders
 		menu.addItem((item) => {
 			item.setTitle(

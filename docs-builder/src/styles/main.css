@@ -101,11 +101,12 @@ body {
    ============================================================ */
 
 .progress-rail {
-  position: fixed;
+  position: sticky;
   left: 0;
   top: 0;
-  bottom: 0;
+  align-self: flex-start;
   width: 3px;
+  height: 100vh;
   z-index: 200;
   background: var(--border);
 }
@@ -911,7 +912,7 @@ body {
 
 .overlay {
   display: none;
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
   z-index: 98;
@@ -941,7 +942,7 @@ body {
   .topbar { display: flex; }
 
   .sidebar {
-    position: fixed;
+    position: absolute;
     left: 0;
     top: 0;
     height: 100vh;

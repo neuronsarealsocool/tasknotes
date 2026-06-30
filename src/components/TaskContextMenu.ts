@@ -33,6 +33,10 @@ import { ContextMenu } from "./ContextMenu";
 import { buildTimeblockPrefillForTask } from "../utils/timeblockPrefillUtils";
 import { TimeblockCreationModal } from "../modals/TimeblockCreationModal";
 import {
+	createCustomPriorityFromMenu,
+	removeCustomPriorityFromMenu,
+} from "../modals/PriorityCreationModal";
+import {
 	addTagsToList,
 	clearEditableTagsFromList,
 	getEditableTaskTags,
@@ -1763,6 +1767,43 @@ export class TaskContextMenu {
 							}
 						}
 					}, 10);
+				}
+			});
+		});
+
+		submenu.addSeparator();
+		submenu.addItem((item) => {
+			item.setTitle("Add custom priority...");
+			item.setIcon("plus");
+			item.onClick(async () => {
+				const priority = await createCustomPriorityFromMenu(plugin);
+				if (!priority) {
+					return;
+				}
+
+				try {
+					await plugin.updateTaskProperty(task, "priority", priority.value);
+					this.options.onUpdate?.();
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					tasknotesLogger.error("Error updating task priority:", {
+						category: "persistence",
+						operation: "updating-task-priority",
+						details: { taskPath: task.path },
+						error: errorMessage,
+					});
+					new Notice(`Failed to update task priority: ${errorMessage}`);
+				}
+			});
+		});
+		submenu.addItem((item) => {
+			item.setTitle("Remove custom priority...");
+			item.setIcon("trash");
+			item.onClick(async () => {
+				const removedPriority = await removeCustomPriorityFromMenu(plugin);
+				if (removedPriority?.value === task.priority) {
+					await plugin.updateTaskProperty(task, "priority", undefined);
+					this.options.onUpdate?.();
 				}
 			});
 		});

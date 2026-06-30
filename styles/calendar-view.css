@@ -717,7 +717,7 @@
         letter-spacing: 0;
     }
 
-    .tasknotes-plugin .mini-calendar-view__today-button {
+.tasknotes-plugin .mini-calendar-view__today-button {
         margin-left: 0;
         width: 100%;
         min-height: 24px;

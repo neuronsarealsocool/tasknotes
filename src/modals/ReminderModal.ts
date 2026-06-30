@@ -1,4 +1,4 @@
-import { App, Modal, Setting, setIcon, Notice, setTooltip } from "obsidian";
+import { App, Modal, Setting, setIcon, Notice, setTooltip, SuggestModal, TFile } from "obsidian";
 import TaskNotesPlugin from "../main";
 import { TaskInfo, Reminder } from "../types";
 import { formatDateForDisplay } from "../utils/dateUtils";
@@ -7,6 +7,42 @@ import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Modals/ReminderModal" });
 const REMINDER_FIELDS_HIDDEN_CLASS = "reminder-modal__fields--hidden";
+const COMPANION_MEDIA_FOLDER = "(Calendar/TaskNotes Companion/Media";
+const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "ogg", "m4a", "flac", "aac"]);
+
+class MediaFileSuggestModal extends SuggestModal<TFile> {
+	constructor(
+		app: App,
+		private files: TFile[],
+		private title: string,
+		private onChoose: (file: TFile) => void
+	) {
+		super(app);
+		this.setPlaceholder(title);
+	}
+
+	getSuggestions(query: string): TFile[] {
+		const normalizedQuery = query.trim().toLowerCase();
+		if (!normalizedQuery) {
+			return this.files.slice(0, 50);
+		}
+
+		return this.files
+			.filter((file) => file.path.toLowerCase().includes(normalizedQuery))
+			.slice(0, 50);
+	}
+
+	renderSuggestion(file: TFile, el: HTMLElement): void {
+		el.createDiv({ text: file.basename });
+		el.createEl("small", { text: file.path });
+	}
+
+	onChooseSuggestion(file: TFile): void {
+		this.onChoose(file);
+		this.close();
+	}
+}
 
 export class ReminderModal extends Modal {
 	private plugin: TaskNotesPlugin;
@@ -25,6 +61,11 @@ export class ReminderModal extends Modal {
 	private absoluteDate = "";
 	private absoluteTime = "";
 	private description = "";
+	private mediaVideo = "";
+	private mediaAudio = "";
+	private mediaNote = "";
+	private mediaLoop = true;
+	private mediaAllowOverlay = false;
 
 	constructor(
 		app: App,
@@ -237,6 +278,14 @@ export class ReminderModal extends Modal {
 					cls: "reminder-modal__reminder-description",
 				});
 				description.textContent = `"${reminder.description}"`;
+			}
+
+			const mediaDetails = this.formatReminderMediaDetails(reminder);
+			if (mediaDetails) {
+				const media = content.createDiv({
+					cls: "reminder-modal__reminder-media",
+				});
+				media.textContent = mediaDetails;
 			}
 
 			// Actions area - only remove button
@@ -477,6 +526,8 @@ export class ReminderModal extends Modal {
 				});
 		});
 
+		this.renderMediaAlertFields(form);
+
 		// Enhanced add button with icon
 		const addBtn = form.createEl("button", {
 			cls: "reminder-add-btn",
@@ -518,6 +569,9 @@ export class ReminderModal extends Modal {
 						this.absoluteTime = "";
 						this.description = "";
 					}
+					this.mediaVideo = "";
+					this.mediaAudio = "";
+					this.mediaNote = "";
 
 					// Reset the form inputs to match the instance variables
 					this.resetFormInputs(form);
@@ -540,6 +594,139 @@ export class ReminderModal extends Modal {
 		this.updateFormVisibility(form, this.selectedType);
 	}
 
+	private formatReminderMediaDetails(reminder: Reminder): string | null {
+		const parts: string[] = [];
+		if (reminder.alert?.video) {
+			parts.push(`Video: ${reminder.alert.video}`);
+		}
+		if (reminder.alert?.audio) {
+			parts.push(`Audio: ${reminder.alert.audio}`);
+		}
+		if (reminder.alert?.note) {
+			parts.push(`Note: ${reminder.alert.note}`);
+		}
+		if (parts.length === 0) {
+			return null;
+		}
+		parts.push(reminder.alert?.audioLoop ? "Repeats until dismissed" : "Plays once");
+		return parts.join(" • ");
+	}
+
+	private renderMediaAlertFields(form: HTMLElement): void {
+		const mediaContainer = form.createDiv({ cls: "reminder-modal__media-fields" });
+		const header = mediaContainer.createDiv({ cls: "reminder-modal__media-header" });
+		header.createEl("span", { text: "Media alert" });
+		header.createEl("small", { text: "Optional video or audio file from this vault" });
+
+		let videoInput: HTMLInputElement | null = null;
+		let audioInput: HTMLInputElement | null = null;
+
+		new Setting(mediaContainer)
+			.setName("Alert note")
+			.setDesc("Shown in the media alert, matching tasknotes companion alert.note.")
+			.addTextArea((text) => {
+				text.setPlaceholder("Note")
+					.setValue(this.mediaNote)
+					.onChange((value) => {
+						this.mediaNote = value.trim();
+					});
+				text.inputEl.rows = 3;
+			});
+
+		new Setting(mediaContainer)
+			.setName("Video file")
+			.setDesc("Vault-relative path to a video file.")
+			.addText((text) => {
+				videoInput = text.inputEl;
+				text.setPlaceholder(`${COMPANION_MEDIA_FOLDER}/video.mp4`)
+					.setValue(this.mediaVideo)
+					.onChange((value) => {
+						this.mediaVideo = value.trim();
+					});
+			})
+			.addButton((button) => {
+				button.setButtonText("Browse").onClick(() => {
+					this.openMediaFilePicker("Choose reminder video", VIDEO_EXTENSIONS, (file) => {
+						this.mediaVideo = file.path;
+						const selectedPath = file.path;
+						if (videoInput) {
+							videoInput.value = selectedPath;
+							videoInput.dispatchEvent(new InputEvent("input", { bubbles: true }));
+							videoInput.dispatchEvent(new Event("change", { bubbles: true }));
+						}
+						new Notice(`Selected video: ${file.name}`);
+					});
+				});
+			});
+
+		new Setting(mediaContainer)
+			.setName("Audio file")
+			.setDesc("Vault-relative path to an audio file.")
+			.addText((text) => {
+				audioInput = text.inputEl;
+				text.setPlaceholder(`${COMPANION_MEDIA_FOLDER}/audio.mp3`)
+					.setValue(this.mediaAudio)
+					.onChange((value) => {
+						this.mediaAudio = value.trim();
+					});
+			})
+			.addButton((button) => {
+				button.setButtonText("Browse").onClick(() => {
+					this.openMediaFilePicker("Choose reminder audio", AUDIO_EXTENSIONS, (file) => {
+						this.mediaAudio = file.path;
+						const selectedPath = file.path;
+						if (audioInput) {
+							audioInput.value = selectedPath;
+							audioInput.dispatchEvent(new InputEvent("input", { bubbles: true }));
+							audioInput.dispatchEvent(new Event("change", { bubbles: true }));
+						}
+						new Notice(`Selected audio: ${file.name}`);
+					});
+				});
+			});
+
+		new Setting(mediaContainer)
+			.setName("Repeat media")
+			.setDesc("Loop video/audio until the reminder is dismissed.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.mediaLoop).onChange((value) => {
+					this.mediaLoop = value;
+				});
+			});
+
+		new Setting(mediaContainer)
+			.setName("Allow overlapping reminders")
+			.setDesc("Keep previous media reminders open when a new one appears.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.mediaAllowOverlay).onChange((value) => {
+					this.mediaAllowOverlay = value;
+				});
+			});
+	}
+
+	private openMediaFilePicker(
+		title: string,
+		extensions: Set<string>,
+		onChoose: (file: TFile) => void
+	): void {
+		const matchingFiles = this.app.vault
+			.getFiles()
+			.filter((file) => extensions.has(file.extension.toLowerCase()))
+			.sort((a, b) => a.path.localeCompare(b.path));
+
+		if (matchingFiles.length === 0) {
+			new Notice("No matching media files found in the vault");
+			return;
+		}
+
+		const companionMediaFiles = matchingFiles.filter((file) =>
+			file.path.startsWith(`${COMPANION_MEDIA_FOLDER}/`)
+		);
+		const files = companionMediaFiles.length > 0 ? companionMediaFiles : matchingFiles;
+
+		new MediaFileSuggestModal(this.app, files, title, onChoose).open();
+	}
+
 	private updateFormVisibility(form: HTMLElement, type: "absolute" | "relative"): void {
 		const relativeFields = form.querySelector(".relative-fields") as HTMLElement;
 		const absoluteFields = form.querySelector(".absolute-fields") as HTMLElement;
@@ -559,6 +746,10 @@ export class ReminderModal extends Modal {
 		description: string
 	): Reminder | null {
 		const id = `rem_${Date.now()}`;
+		const applyAlert = (reminder: Reminder): Reminder => {
+			const alert = this.createReminderAlert(description);
+			return alert ? { ...reminder, alert } : reminder;
+		};
 
 		if (type === "relative") {
 			// Check if anchor date exists
@@ -583,13 +774,13 @@ export class ReminderModal extends Modal {
 				duration = "-" + duration;
 			}
 
-			return {
+			return applyAlert({
 				id,
 				type: "relative",
 				relatedTo: anchor,
 				offset: duration,
 				description: description || undefined,
-			};
+			});
 		} else {
 			// Absolute reminder
 			if (!date || !time) {
@@ -599,13 +790,32 @@ export class ReminderModal extends Modal {
 
 			const absoluteTime = `${date}T${time}:00`;
 
-			return {
+			return applyAlert({
 				id,
 				type: "absolute",
 				absoluteTime,
 				description: description || undefined,
-			};
+			});
 		}
+	}
+
+	private createReminderAlert(description: string): Reminder["alert"] | undefined {
+		const video = this.mediaVideo.trim();
+		const audio = this.mediaAudio.trim();
+		const note = this.mediaNote.trim() || description.trim() || "Note";
+		if (!video && !audio) {
+			return undefined;
+		}
+
+		return {
+			style: "fullscreen",
+			note,
+			video: video || undefined,
+			audio: audio || undefined,
+			audioLoop: this.mediaLoop,
+			audioUntil: this.mediaLoop ? "dismiss" : "end",
+			allowOverlay: this.mediaAllowOverlay,
+		};
 	}
 
 	private formatReminderTiming(reminder: Reminder): string {
@@ -741,6 +951,21 @@ export class ReminderModal extends Modal {
 		const timeAbsInput = form.querySelector('input[type="time"]') as HTMLInputElement;
 		if (timeAbsInput) timeAbsInput.value = this.absoluteTime;
 
+		const videoInput = form.querySelector(
+			`input[placeholder="${COMPANION_MEDIA_FOLDER}/video.mp4"]`
+		) as HTMLInputElement;
+		if (videoInput) videoInput.value = this.mediaVideo;
+
+		const audioInput = form.querySelector(
+			`input[placeholder="${COMPANION_MEDIA_FOLDER}/audio.mp3"]`
+		) as HTMLInputElement;
+		if (audioInput) audioInput.value = this.mediaAudio;
+
+		const mediaNoteInput = form.querySelector(
+			'textarea[placeholder="Note"]'
+		) as HTMLTextAreaElement;
+		if (mediaNoteInput) mediaNoteInput.value = this.mediaNote;
+
 		// Update dropdowns to match instance variables
 		const unitDropdown = form.querySelector(
 			'.setting-item:has(input[placeholder="15"]) select'
@@ -826,7 +1051,8 @@ export class ReminderModal extends Modal {
 				reminder.relatedTo === original.relatedTo &&
 				reminder.offset === original.offset &&
 				reminder.absoluteTime === original.absoluteTime &&
-				reminder.description === original.description
+				reminder.description === original.description &&
+				JSON.stringify(reminder.alert ?? null) === JSON.stringify(original.alert ?? null)
 			);
 		});
 	}

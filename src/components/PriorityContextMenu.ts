@@ -1,5 +1,9 @@
 import TaskNotesPlugin from "../main";
 import { PriorityConfig } from "../types";
+import {
+	createCustomPriorityFromMenu,
+	removeCustomPriorityFromMenu,
+} from "../modals/PriorityCreationModal";
 import { ContextMenu } from "./ContextMenu";
 
 export interface PriorityContextMenuOptions {
@@ -41,6 +45,25 @@ export class PriorityContextMenu {
 				item.onClick(async () => {
 					this.options.onSelect(priority.value);
 				});
+			});
+		});
+
+		this.menu.addSeparator();
+		this.menu.addItem((item) => {
+			item.setIcon("plus");
+			item.setTitle("Add custom priority...");
+			item.onClick(async () => {
+				const priority = await createCustomPriorityFromMenu(this.options.plugin);
+				if (priority) {
+					this.options.onSelect(priority.value);
+				}
+			});
+		});
+		this.menu.addItem((item) => {
+			item.setIcon("trash");
+			item.setTitle("Remove custom priority...");
+			item.onClick(async () => {
+				await removeCustomPriorityFromMenu(this.options.plugin);
 			});
 		});
 	}

@@ -525,6 +525,15 @@ export interface Reminder {
 
 	// Common properties
 	description?: string; // The notification message (optional, can be auto-generated)
+	alert?: {
+		style?: string;
+		note?: string;
+		video?: string;
+		audio?: string;
+		audioLoop?: boolean;
+		audioUntil?: string;
+		allowOverlay?: boolean;
+	};
 }
 
 // Timeblocking types

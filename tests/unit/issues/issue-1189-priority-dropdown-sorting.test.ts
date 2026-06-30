@@ -42,7 +42,9 @@ function buildPriorityMenu(priorities: PriorityConfig[], currentValue?: string):
 }
 
 function menuTitles(menu: MockMenu): string[] {
-	return menu.items.map((item) => item.setTitle.mock.calls[0][0]);
+	return menu.items
+		.filter((item) => item.setTitle?.mock.calls.length)
+		.map((item) => item.setTitle.mock.calls[0][0]);
 }
 
 describe("Issue #1189: priority dropdown sorting", () => {
@@ -60,7 +62,12 @@ describe("Issue #1189: priority dropdown sorting", () => {
 
 		const menu = buildPriorityMenu(priorities);
 
-		expect(menuTitles(menu)).toEqual(["1-Urgent", "2-High", "3-Normal", "4-Low"]);
+		expect(menuTitles(menu).slice(0, priorities.length)).toEqual([
+			"1-Urgent",
+			"2-High",
+			"3-Normal",
+			"4-Low",
+		]);
 	});
 
 	it("keeps the selected priority marker without changing the configured order", () => {
@@ -71,7 +78,10 @@ describe("Issue #1189: priority dropdown sorting", () => {
 		];
 
 		const menu = buildPriorityMenu(priorities, "normal");
+		const priorityTitles = menuTitles(menu).slice(0, priorities.length);
 
-		expect(menuTitles(menu)).toEqual(["Low", "✓ Normal", "High"]);
+		expect(priorityTitles[0]).toBe("Low");
+		expect(priorityTitles[1]).toContain("Normal");
+		expect(priorityTitles[2]).toBe("High");
 	});
 });

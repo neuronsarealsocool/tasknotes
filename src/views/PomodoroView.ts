@@ -1395,9 +1395,7 @@ export class PomodoroView extends ItemView {
 	}
 
 	private adjustSessionTime(seconds: number) {
-		if (!this.plugin.pomodoroService) {
-			return;
-		}
+		if (!this.plugin.pomodoroService) return;
 
 		const state = this.plugin.pomodoroService.getState();
 
