@@ -13,9 +13,10 @@ import {
 	type TaskFilenameSettings,
 	generateTaskFilename,
 	generateUniqueFilename,
+	generateOccurrenceFilename,
 } from "../../utils/filenameGenerator";
 import { ensureFolderExists } from "../../utils/helpers";
-import { getCurrentTimestamp } from "../../utils/dateUtils";
+import { getCurrentDateString, getCurrentTimestamp } from "../../utils/dateUtils";
 import { stringifyUnknown } from "../../utils/stringUtils";
 import { mergeTemplateFrontmatter } from "../../utils/templateProcessor";
 import {
@@ -65,6 +66,10 @@ interface TaskCreationCalendarSyncService {
 	syncTaskToCalendar(task: TaskInfo): Promise<unknown>;
 }
 
+interface TaskCreationStatusManager {
+	isCompletedStatus(status: string): boolean;
+}
+
 type TaskCreationSettings = Pick<
 	TaskNotesSettings,
 	| "storeTitleInFilename"
@@ -87,6 +92,7 @@ export interface TaskCreationRuntime {
 	};
 	settings: TaskCreationSettings;
 	fieldMapper: TaskCreationFieldMapper;
+	statusManager?: TaskCreationStatusManager;
 	cacheManager: TaskCreationCacheManager;
 	emitter: TaskCreationEmitter;
 	taskCalendarSyncService?: TaskCreationCalendarSyncService;
@@ -139,6 +145,13 @@ export class TaskCreationService {
 			const status = taskData.status || runtime.settings.defaultTaskStatus;
 			const dateCreated = taskData.dateCreated || getCurrentTimestamp();
 			const dateModified = taskData.dateModified || getCurrentTimestamp();
+			const recurrence = taskData.recurrence || undefined;
+			const completedDate = !recurrence
+				? taskData.completedDate ||
+					(runtime.statusManager?.isCompletedStatus(status)
+						? getCurrentDateString()
+						: undefined)
+				: undefined;
 
 			const contextsArray = taskData.contexts || [];
 			const projectsArray = taskData.projects || [];
@@ -167,7 +180,15 @@ export class TaskCreationService {
 				parentNote: taskData.parentNote,
 			};
 
-			const baseFilename = generateTaskFilename(filenameContext, runtime.settings);
+			const occurrenceFilenameTemplate = taskData.occurrenceFilenameTemplate?.trim();
+			const baseFilename =
+				occurrenceFilenameTemplate && taskData.occurrence_date
+					? generateOccurrenceFilename(
+							filenameContext,
+							occurrenceFilenameTemplate,
+							taskData.occurrence_date
+						)
+					: generateTaskFilename(filenameContext, runtime.settings);
 			const folder = await this.resolveTargetFolder(taskData);
 
 			if (folder) {
@@ -180,6 +201,18 @@ export class TaskCreationService {
 				runtime.app.vault
 			);
 			const fullPath = folder ? `${folder}/${uniqueFilename}.md` : `${uniqueFilename}.md`;
+			// A templated occurrence filename intentionally differs from the
+			// title, but still represents it as long as the generated name was
+			// used as-is (no collision suffix) and nothing was lost to
+			// filename sanitization.
+			const expectedFilename =
+				occurrenceFilenameTemplate && taskData.occurrence_date
+					? baseFilename
+					: filenameTitle;
+			const titleIsRepresentedByFilename =
+				runtime.settings.storeTitleInFilename &&
+				uniqueFilename === expectedFilename &&
+				title === filenameTitle;
 
 			const completeTaskData: Partial<TaskInfo> = {
 				title,
@@ -195,7 +228,8 @@ export class TaskCreationService {
 						: undefined,
 				dateCreated,
 				dateModified,
-				recurrence: taskData.recurrence || undefined,
+				recurrence,
+				completedDate,
 				recurrence_anchor: taskData.recurrence_anchor || undefined,
 				recurrence_parent: taskData.recurrence_parent || undefined,
 				occurrence_date: taskData.occurrence_date || undefined,
@@ -258,7 +292,7 @@ export class TaskCreationService {
 			const frontmatter = runtime.fieldMapper.mapToFrontmatter(
 				completeTaskData,
 				taskTagForFrontmatter,
-				runtime.settings.storeTitleInFilename
+				titleIsRepresentedByFilename
 			);
 
 			if (runtime.settings.taskIdentificationMethod === "property") {
@@ -290,7 +324,7 @@ export class TaskCreationService {
 			if (taskData.customFrontmatter) {
 				finalFrontmatter = { ...finalFrontmatter, ...taskData.customFrontmatter };
 			}
-			if (runtime.settings.storeTitleInFilename) {
+			if (titleIsRepresentedByFilename) {
 				delete finalFrontmatter[runtime.fieldMapper.toUserField("title")];
 			}
 			if (runtime.settings.taskIdentificationMethod === "property") {
@@ -360,6 +394,7 @@ export class TaskCreationService {
 
 			if (
 				runtime.taskCalendarSyncService &&
+				runtime.settings.googleCalendarExport.enabled &&
 				runtime.settings.googleCalendarExport.syncOnTaskCreate
 			) {
 				runtime.taskCalendarSyncService.syncTaskToCalendar(taskInfo).catch((error) => {
@@ -384,43 +419,22 @@ export class TaskCreationService {
 		}
 	}
 
-	private resolveCurrentNoteFolderVariables(folderTemplate: string): string {
-		if (
-			!folderTemplate.includes("{{currentNotePath}}") &&
-			!folderTemplate.includes("{{currentNoteTitle}}")
-		) {
-			return folderTemplate;
-		}
-
-		const currentFile = this.deps.runtime.app.workspace.getActiveFile();
-		return folderTemplate
-			.replace(/\{\{currentNotePath\}\}/g, currentFile?.parent?.path || "")
-			.replace(/\{\{currentNoteTitle\}\}/g, currentFile?.basename || "");
-	}
-
 	private async resolveTargetFolder(taskData: TaskCreationData): Promise<string> {
 		const { runtime } = this.deps;
-		let folder = "";
-
 		if (
 			taskData.creationContext === "inline-conversion" ||
 			taskData.creationContext === "modal-inline-creation"
 		) {
 			const inlineFolder = runtime.settings.inlineTaskConvertFolder || "";
 			if (inlineFolder.trim()) {
-				folder = this.resolveCurrentNoteFolderVariables(inlineFolder);
-				return this.deps.processFolderTemplate(folder, taskData);
+				return this.deps.processFolderTemplate(inlineFolder, taskData);
 			}
 
-			const tasksFolder = this.resolveCurrentNoteFolderVariables(
-				runtime.settings.tasksFolder || ""
-			);
+			const tasksFolder = runtime.settings.tasksFolder || "";
 			return this.deps.processFolderTemplate(tasksFolder, taskData);
 		}
 
-		const tasksFolder = this.resolveCurrentNoteFolderVariables(
-			runtime.settings.tasksFolder || ""
-		);
+		const tasksFolder = runtime.settings.tasksFolder || "";
 		return this.deps.processFolderTemplate(tasksFolder, taskData);
 	}
 }

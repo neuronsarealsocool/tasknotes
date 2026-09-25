@@ -235,6 +235,7 @@ export const es: TranslationTree = {
 				events: {
 					showScheduledTasks: "Mostrar tareas programadas",
 					showDueTasks: "Mostrar tareas vencidas",
+					showOverdueOnToday: "Mostrar tareas atrasadas en la fecha de hoy",
 					showRecurringTasks: "Mostrar tareas recurrentes",
 					showTimeEntries: "Mostrar entradas de tiempo",
 					showTimeblocks: "Mostrar bloques de tiempo",
@@ -482,7 +483,7 @@ export const es: TranslationTree = {
 			viewAllLink: "Ver todas las notas de versión en GitHub →",
 			starMessage:
 				"Agradecemos mucho todos los comentarios. Si algo no te parece bien, cuéntanoslo en GitHub. Si TaskNotes te resulta útil, considera darle una estrella.",
-			baseFilesNotice: "> [!info] Acerca de los archivos `.base` predeterminados\n> Los cambios en las plantillas `.base` generadas por defecto no sobrescriben tus archivos `.base` existentes, por lo que tus personalizaciones se mantienen.\n> Si quieres las mejoras más recientes de las plantillas, regenera los archivos base en **Ajustes → TaskNotes → General → Vistas y archivos base → Crear archivos**."
+			baseFilesNotice: "> [!info] Acerca de los archivos `.base` predeterminados\n> Los cambios en las plantillas `.base` generadas por defecto no sobrescriben tus archivos `.base` existentes, por lo que tus personalizaciones se mantienen.\n> Si quieres las mejoras más recientes de las plantillas, regenera los archivos base en **Ajustes → TaskNotes → General → Vistas y archivos base → Actualizar archivos**."
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const es: TranslationTree = {
 				filenameUpdatesWithTitle: "El nombre del archivo se actualizará automáticamente cuando cambie el título de la tarea.",
 				filenameFormat: "Formato de nombre de archivo:",
 				customTemplate: "Plantilla personalizada:",
-				legacySyntaxWarning: "La sintaxis de llaves simples como {title} está obsoleta. Por favor, use la sintaxis de llaves dobles {{title}} para consistencia con las plantillas de cuerpo."
+				legacySyntaxWarning: "La sintaxis de llaves simples como {title} está obsoleta. Por favor, use la sintaxis de llaves dobles {{title}} para consistencia con las plantillas de cuerpo.",
+				occurrenceFilenameTemplate: "Plantilla de nombre de archivo para ocurrencias",
+				occurrenceFilenameTemplateHelp:
+					"Plantilla de nombre de archivo para ocurrencias materializadas de tareas recurrentes. Déjala vacía para conservar el nombre existente (título de la tarea principal más un sufijo numérico). Elige explícitamente la granularidad con {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}} o {{occurrenceMonthName}}. También funcionan todas las variables normales de nombres de archivo. Una tarea principal puede sobrescribir esta plantilla mediante la propiedad de frontmatter configurada abajo.",
+				occurrenceFilenameProperty: "Propiedad para sobrescribir la plantilla de ocurrencias",
+				occurrenceFilenamePropertyHelp:
+					"Nombre de la propiedad de frontmatter de una tarea recurrente principal que sobrescribe la plantilla de nombre de archivo de sus ocurrencias."
 			},
 			tagsCard: {
 				nativeObsidianTags: "Usa etiquetas nativas de Obsidian"
@@ -1288,6 +1295,10 @@ export const es: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "Propiedades visibles predeterminadas",
 					description: "Elegir qué propiedades aparecen en las tarjetas de tareas por defecto."
+				},
+				completionSubmenu: {
+					name: "Agrupar las acciones de completar y omitir en un submenú",
+					description: "Coloca las acciones de completar y omitir en un submenú del menú contextual de la tarea. Desactiva esta opción para mostrarlas directamente en el menú."
 				},
 				propertyGroups: {
 					coreProperties: "PROPIEDADES PRINCIPALES",
@@ -1967,7 +1978,7 @@ export const es: TranslationTree = {
 				},
 				authToken: {
 					name: "Token de autenticación API",
-					description: "Token requerido para autenticación API (dejar vacío para sin autenticación)",
+					description: "Token de TaskNotes, no la clave API de tu proveedor de IA. Para generar uno, activa la API HTTP, deja este campo vacío y reinicia Obsidian. Después copia el token generado en la configuración de autenticación Bearer del cliente. Actualiza los clientes cada vez que cambie este token.",
 					placeholder: "tu-token-secreto"
 				},
 				mcp: {
@@ -2256,6 +2267,8 @@ export const es: TranslationTree = {
 		refreshCache: "Actualizar caché",
 		exportAllTasksIcs: "Exportar todas las tareas como archivo ICS",
 		viewReleaseNotes: "Ver notas de la versión",
+		startTimeTrackingCurrentTask: "Iniciar seguimiento de tiempo para la tarea actual",
+		stopTimeTrackingCurrentTask: "Detener seguimiento de tiempo para la tarea actual",
 		startTimeTrackingWithSelector: "Iniciar seguimiento de tiempo (seleccionar tarea)",
 		editTimeEntries: "Editar entradas de tiempo (seleccionar tarea)",
 		createOrOpenTask: "Crear o abrir tarea",
@@ -2869,6 +2882,24 @@ export const es: TranslationTree = {
 			markIncomplete: "Marcar como incompleto para esta fecha",
 			skipInstance: "Omitir instancia",
 			unskipInstance: "Deshacer omisión de instancia",
+			completion: {
+				submenu: "Marcar como completada u omitir",
+				submenuCompleteOnly: "Marcar como completada",
+				completeToday: "Completada hoy",
+				completeAsScheduled: "Completada en la fecha programada",
+				completeOnDue: "Completada en la fecha de vencimiento",
+				completeOnPicked: "Completada el (elegir fecha)",
+				markIncomplete: "Marcar como incompleta",
+				noScheduledDate: "Esta tarea no tiene una fecha programada",
+				noDueDate: "Esta tarea no tiene una fecha de vencimiento",
+				noPickedDate: "No se ha seleccionado ninguna fecha",
+				noCompletedStatus: "No hay ningún estado de finalización configurado",
+				pickDateTitle: "Elegir fecha de finalización",
+				completeFailure: "No se pudo actualizar la finalización de la tarea: {message}",
+				clearInstancesConfirmTitle: "¿Borrar las instancias registradas?",
+				clearInstancesConfirmMessage: "Al reprogramar se borrarán estas instancias registradas como completadas u omitidas en la nueva fecha o después de ella: {dates}. Dejarán de estar marcadas como completadas u omitidas. ¿Continuar?",
+				clearInstancesConfirmButton: "Reprogramar y borrar"
+			},
 			quickReminders: {
 				atTime: "A la hora del evento",
 				fiveMinutes: "5 minutos antes",
@@ -3100,7 +3131,8 @@ export const es: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "1 recordatorio configurado (clic para gestionar)",
 			reminderTooltipMany: "{count} recordatorios configurados (clic para gestionar)",
-			projectTooltip: "Esta tarea se usa como proyecto (clic para filtrar subtareas)",
+			projectTooltip: "Esta tarea se usa como proyecto (clic para mostrar/ocultar subtareas)",
+			projectIndicatorTooltip: "Esta tarea se utiliza como proyecto",
 			expandSubtasks: "Expandir subtareas",
 			collapseSubtasks: "Contraer subtareas",
 			dueToday: "{label}: Hoy",

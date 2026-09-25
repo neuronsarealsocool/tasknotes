@@ -6,6 +6,7 @@ import { BasesViewBase } from "./BasesViewBase";
 import { TaskInfo } from "../types";
 import { identifyTaskNotesFromBasesData } from "./helpers";
 import { createTaskCard, showTaskContextMenu, type TaskCardOptions } from "../ui/TaskCard";
+import { getTaskCardPropertyValue } from "../ui/taskCardPropertyAccess";
 import { renderGroupTitle } from "./groupTitleRenderer";
 import { type LinkServices } from "../ui/renderers/linkRenderer";
 import { DateContextMenu } from "../components/DateContextMenu";
@@ -30,6 +31,7 @@ import {
 	type SortOrderPlan,
 } from "./sortOrderUtils";
 import { clearStaticStyleClasses } from "../utils/staticStyleClasses";
+import { createElementInDocument } from "../utils/documentDom";
 import { computeBasesFormulas, isObsidianListProperty } from "./basesViewAdapters";
 import { coerceGroupKeyForFrontmatter as coercePropertyGroupKeyForFrontmatter } from "./propertyValueCoercion";
 import {
@@ -64,6 +66,7 @@ import {
 	moveItemsRelativeToTarget,
 } from "./manualOrderState";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
+import { processVaultFrontMatter } from "../services/VaultMutationService";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Bases/TaskListView" });
 
@@ -84,6 +87,7 @@ type TaskListController = {
 type TaskListEphemeralState = {
 	collapsedGroups?: unknown;
 	collapsedSubGroups?: unknown;
+	itemsContainerScrollTop?: unknown;
 	scrollTop?: unknown;
 };
 
@@ -468,7 +472,7 @@ export class TaskListView extends BasesViewBase {
 		const doc = this.containerEl.ownerDocument;
 
 		// Create items container
-		const itemsContainer = doc.createElement("div");
+		const itemsContainer = createElementInDocument(doc, "div");
 		itemsContainer.className = "tn-bases-items-container";
 		// Use flex: 1 to fill available space in the rootElement flex container
 		// max-height: 100vh prevents unbounded growth when embedded in notes
@@ -807,7 +811,8 @@ export class TaskListView extends BasesViewBase {
 			return false;
 		}
 
-		if (targetEl.closest(this.CARD_NO_DRAG_SELECTOR)) {
+		const noDragElement = targetEl.closest(this.CARD_NO_DRAG_SELECTOR);
+		if (noDragElement && cardEl.contains(noDragElement)) {
 			return true;
 		}
 
@@ -834,7 +839,7 @@ export class TaskListView extends BasesViewBase {
 			return;
 		}
 
-		const handle = cardEl.ownerDocument.createElement("div");
+		const handle = createElementInDocument(cardEl.ownerDocument, "div");
 		handle.className = "task-card__drag-handle";
 		handle.dataset.tnDragHandle = "true";
 		handle.setAttribute("draggable", "true");
@@ -859,29 +864,47 @@ export class TaskListView extends BasesViewBase {
 		groupKey: string | null
 	): void {
 		let dragOriginTarget: EventTarget | null = null;
+		let dragOriginSuppressed = false;
 		const restoreCardDraggable = () => {
 			cardEl.setAttribute(
 				"draggable",
 				this.isMobileDragHandleOnlyMode(cardEl) ? "false" : "true"
 			);
 			dragOriginTarget = null;
+			dragOriginSuppressed = false;
+		};
+		const isPrimaryPress = (event: MouseEvent | PointerEvent) =>
+			typeof event.button !== "number" || event.button === 0;
+		const captureDragOrigin = (event: MouseEvent | PointerEvent) => {
+			dragOriginTarget = event.target;
+			dragOriginSuppressed = this.shouldSuppressCardDrag(event.target, cardEl);
+			cardEl.setAttribute("draggable", dragOriginSuppressed ? "false" : "true");
+
+			if (dragOriginSuppressed || !isPrimaryPress(event)) {
+				return;
+			}
+
+			// Live Preview embeds sit inside CodeMirror. Keep reorder presses from
+			// becoming editor selection gestures before the browser can start DnD.
+			// Do not preventDefault: cancelling mousedown also cancels native dragging.
+			event.stopPropagation();
 		};
 
 		this.setupCardDragHandle(cardEl);
 		restoreCardDraggable();
 
+		cardEl.addEventListener("pointerdown", captureDragOrigin, { capture: true });
 		cardEl.addEventListener(
 			"mousedown",
-			(e: MouseEvent) => {
-				dragOriginTarget = e.target;
-				cardEl.setAttribute(
-					"draggable",
-					this.shouldSuppressCardDrag(e.target, cardEl) ? "false" : "true"
-				);
-			},
+			captureDragOrigin,
 			{ capture: true }
 		);
-		cardEl.addEventListener("mouseup", restoreCardDraggable);
+		cardEl.addEventListener("mouseup", (e: MouseEvent) => {
+			if (!dragOriginSuppressed && isPrimaryPress(e)) {
+				e.stopPropagation();
+			}
+			restoreCardDraggable();
+		});
 		cardEl.addEventListener("click", restoreCardDraggable, { capture: true });
 
 		cardEl.addEventListener("dragstart", (e: DragEvent) => {
@@ -892,6 +915,7 @@ export class TaskListView extends BasesViewBase {
 				return;
 			}
 
+			e.stopPropagation();
 			this.draggedTaskPath = task.path;
 			this.dragGroupKey = groupKey;
 			cardEl.classList.add("task-card--dragging");
@@ -1391,7 +1415,7 @@ export class TaskListView extends BasesViewBase {
 			});
 
 			// Single atomic write: group property + sort_order + derivative fields
-			await this.plugin.app.fileManager.processFrontMatter(file, (fm) => {
+			await processVaultFrontMatter(this.plugin.app, file, (fm) => {
 				applyTaskListDropFrontmatterMutation({
 					frontmatter: fm,
 					plan: groupDropPlan,
@@ -1601,7 +1625,7 @@ export class TaskListView extends BasesViewBase {
 
 		for (const taskInfo of taskNotes) {
 			let cardEl = orderChanged ? null : this.currentTaskElements.get(taskInfo.path) || null;
-			const signature = this.buildTaskSignature(taskInfo);
+			const signature = this.buildTaskSignature(taskInfo, visibleProperties);
 			const previousSignature = this.lastTaskSignatures.get(taskInfo.path);
 			const needsUpdate = cardRenderChanged || signature !== previousSignature || !cardEl;
 
@@ -1923,7 +1947,7 @@ export class TaskListView extends BasesViewBase {
 		// Use correct document for pop-out window support
 		const doc = this.containerEl.ownerDocument;
 
-		const groupHeader = doc.createElement("div");
+		const groupHeader = createElementInDocument(doc, "div");
 		groupHeader.className = "task-section task-group";
 
 		// Determine header level and set appropriate data attributes
@@ -1946,12 +1970,12 @@ export class TaskListView extends BasesViewBase {
 			groupHeader.classList.add("is-collapsed");
 		}
 
-		const headerElement = doc.createElement("h3");
+		const headerElement = createElementInDocument(doc, "h3");
 		headerElement.className = "task-group-header task-list-view__group-header";
 		groupHeader.appendChild(headerElement);
 
 		// Add toggle button
-		const toggleBtn = doc.createElement("button");
+		const toggleBtn = createElementInDocument(doc, "button");
 		toggleBtn.className = "task-group-toggle";
 		toggleBtn.type = "button";
 		toggleBtn.setAttribute("aria-label", "Toggle group");
@@ -2024,7 +2048,7 @@ export class TaskListView extends BasesViewBase {
 	private renderEmptyState(): void {
 		// Use correct document for pop-out window support
 		const doc = this.containerEl.ownerDocument;
-		const emptyEl = doc.createElement("div");
+		const emptyEl = createElementInDocument(doc, "div");
 		emptyEl.className = "tn-bases-empty";
 		emptyEl.classList.remove(
 			"tn-static-color-var-color-accent-d2cad743",
@@ -2058,7 +2082,7 @@ export class TaskListView extends BasesViewBase {
 	renderError(error: Error): void {
 		// Use correct document for pop-out window support
 		const doc = this.containerEl.ownerDocument;
-		const errorEl = doc.createElement("div");
+		const errorEl = createElementInDocument(doc, "div");
 		errorEl.className = "tn-bases-error";
 		errorEl.classList.remove(
 			"tn-static-border-radius-4px-c290c56e",
@@ -2148,19 +2172,17 @@ export class TaskListView extends BasesViewBase {
 		return {
 			...baseStateObject,
 			scrollTop: this.rootElement?.scrollTop || 0,
+			itemsContainerScrollTop: this.itemsContainer?.scrollTop || 0,
 			collapsedGroups: Array.from(this.collapsedGroups),
 			collapsedSubGroups: Array.from(this.collapsedSubGroups),
 		};
 	}
 
-	/**
-	 * Restore ephemeral state after view reload.
-	 * Restores scroll position, collapsed groups, and collapsed sub-groups.
-	 */
-	setEphemeralState(state: unknown): void {
-		if (!isTaskListEphemeralState(state)) return;
-		super.setEphemeralState(state);
+	private hasInitializedCollapseState(): boolean {
+		return this.initializedPrimaryGroupKeys.size > 0 || this.initializedSubGroupKeys.size > 0;
+	}
 
+	private restoreCollapsedStateFromEphemeral(state: TaskListEphemeralState): void {
 		let restoredCollapsedState = false;
 
 		// Restore collapsed groups immediately
@@ -2181,6 +2203,20 @@ export class TaskListView extends BasesViewBase {
 			restoredCollapsedState = restoredCollapsedState || filtered.length > 0;
 		}
 		this.deferCollapseDefaultForNextSnapshot = restoredCollapsedState;
+	}
+
+	/**
+	 * Restore ephemeral state after view reload. Collapse state is applied only before the
+	 * view builds its first grouping snapshot, so a stale snapshot captured before a render
+	 * cannot undo the collapse default that render seeded.
+	 */
+	setEphemeralState(state: unknown): void {
+		if (!isTaskListEphemeralState(state)) return;
+		super.setEphemeralState(state);
+
+		if (!this.hasInitializedCollapseState()) {
+			this.restoreCollapsedStateFromEphemeral(state);
+		}
 
 		// Restore scroll position after render completes
 		if (typeof state.scrollTop === "number" && this.rootElement) {
@@ -2189,6 +2225,15 @@ export class TaskListView extends BasesViewBase {
 			window.requestAnimationFrame(() => {
 				if (this.rootElement && this.rootElement.isConnected) {
 					this.rootElement.scrollTop = scrollTop;
+				}
+			});
+		}
+		if (typeof state.itemsContainerScrollTop === "number") {
+			const itemsContainerScrollTop = state.itemsContainerScrollTop;
+			window.requestAnimationFrame(() => {
+				if (this.itemsContainer && this.itemsContainer.isConnected) {
+					this.itemsContainer.scrollTop = itemsContainerScrollTop;
+					this.virtualScroller?.recalculate();
 				}
 			});
 		}
@@ -2515,9 +2560,6 @@ export class TaskListView extends BasesViewBase {
 					event
 				);
 				return;
-			case "filter-project-subtasks":
-				await this.filterProjectSubtasks(task);
-				return;
 			case "toggle-subtasks":
 				await this.toggleSubtasks(task, target);
 				return;
@@ -2753,19 +2795,6 @@ export class TaskListView extends BasesViewBase {
 		}
 	}
 
-	private async filterProjectSubtasks(task: TaskInfo): Promise<void> {
-		try {
-			await this.plugin.applyProjectSubtaskFilter(task);
-		} catch (error) {
-			tasknotesLogger.error("[TaskNotes][TaskListView] Failed to filter project subtasks", {
-				category: "persistence",
-				operation: "filter-project-subtasks",
-				error: error,
-			});
-			new Notice("Failed to filter project subtasks");
-		}
-	}
-
 	private async toggleSubtasks(task: TaskInfo, target: HTMLElement): Promise<void> {
 		try {
 			if (!this.plugin.expandedProjectsService) {
@@ -2855,9 +2884,17 @@ export class TaskListView extends BasesViewBase {
 		}
 	}
 
-	private buildTaskSignature(task: TaskInfo): string {
-		// Fast signature using only fields that affect rendering
-		return `${task.path}|${task.title}|${task.status}|${task.priority}|${task.due}|${task.scheduled}|${task.recurrence}|${task.archived}|${task.sortOrder}|${task.complete_instances?.join(",")}|${task.reminders?.length}|${task.blocking?.length}|${task.blockedBy?.length}`;
+	private buildTaskSignature(task: TaskInfo, visibleProperties: string[] = []): string {
+		// Snapshot task data, not just a hand-maintained subset: badges and controls
+		// also depend on fields that may not be selected as visible properties.
+		// Raw Bases entries are live objects (and can be circular); resolve only
+		// displayed values through the same accessor used by task cards instead.
+		return JSON.stringify({
+			task: { ...task, basesData: undefined },
+			visibleValues: visibleProperties.map((property) =>
+				getTaskCardPropertyValue(task, property, this.plugin)
+			),
+		});
 	}
 
 	private buildCardRenderSignature(
@@ -2896,3 +2933,5 @@ export function buildTaskListViewFactory(plugin: TaskNotesPlugin): BasesViewFact
 		return new TaskListView(controller, containerEl, plugin) as unknown as BasesView;
 	};
 }
+
+/* eslint-enable @typescript-eslint/no-non-null-assertion -- Re-enable after the legacy view implementation. */

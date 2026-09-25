@@ -235,6 +235,7 @@ export const fr: TranslationTree = {
 				events: {
 					showScheduledTasks: "Afficher les tâches planifiées",
 					showDueTasks: "Afficher les tâches échues",
+					showOverdueOnToday: "Afficher les tâches en retard aujourd'hui",
 					showRecurringTasks: "Afficher les tâches récurrentes",
 					showTimeEntries: "Afficher les entrées de temps",
 					showTimeblocks: "Afficher les blocs de temps",
@@ -482,7 +483,7 @@ export const fr: TranslationTree = {
 			viewAllLink: "Voir toutes les notes de version sur GitHub →",
 			starMessage:
 				"Nous apprécions vraiment tous les retours. Si quelque chose ne vous semble pas correct, dites-le-nous sur GitHub. Si TaskNotes vous est utile, pensez à lui donner une étoile.",
-			baseFilesNotice: "> [!info] À propos des fichiers `.base` par défaut\n> Les modifications des modèles `.base` générés par défaut n'écrasent pas vos fichiers `.base` existants, afin de préserver vos personnalisations.\n> Si vous souhaitez profiter des dernières améliorations de modèles, régénérez les fichiers base via **Paramètres → TaskNotes → Général → Vues et fichiers base → Créer les fichiers**."
+			baseFilesNotice: "> [!info] À propos des fichiers `.base` par défaut\n> Les modifications des modèles `.base` générés par défaut n'écrasent pas vos fichiers `.base` existants, afin de préserver vos personnalisations.\n> Si vous souhaitez profiter des dernières améliorations de modèles, régénérez les fichiers base via **Paramètres → TaskNotes → Général → Vues et fichiers base → Mettre à jour les fichiers**."
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const fr: TranslationTree = {
 				filenameUpdatesWithTitle: "Le nom du fichier sera automatiquement mis à jour quand le titre de la tâche change.",
 				filenameFormat: "Format du nom de fichier :",
 				customTemplate: "Modèle personnalisé :",
-				legacySyntaxWarning: "La syntaxe à accolades simples comme {title} est obsolète. Veuillez utiliser la syntaxe à accolades doubles {{title}} pour la cohérence avec les modèles de corps."
+				legacySyntaxWarning: "La syntaxe à accolades simples comme {title} est obsolète. Veuillez utiliser la syntaxe à accolades doubles {{title}} pour la cohérence avec les modèles de corps.",
+				occurrenceFilenameTemplate: "Modèle de nom de fichier des occurrences",
+				occurrenceFilenameTemplateHelp:
+					"Modèle de nom de fichier pour les occurrences matérialisées des tâches récurrentes. Laissez-le vide pour conserver le nom existant (titre de la tâche parente suivi d’un suffixe numérique). Choisissez explicitement la granularité avec {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}} ou {{occurrenceMonthName}}. Toutes les variables de nom de fichier habituelles fonctionnent également. Une tâche parente peut remplacer ce modèle via la propriété de frontmatter configurée ci-dessous.",
+				occurrenceFilenameProperty: "Propriété de remplacement du modèle d’occurrence",
+				occurrenceFilenamePropertyHelp:
+					"Nom de la propriété de frontmatter d’une tâche récurrente parente qui remplace le modèle de nom de fichier de ses occurrences."
 			},
 			tagsCard: {
 				nativeObsidianTags: "Utilise les étiquettes Obsidian natives"
@@ -1288,6 +1295,10 @@ export const fr: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "Propriétés visibles par défaut",
 					description: "Choisissez quelles propriétés apparaissent sur les cartes de tâches par défaut."
+				},
+				completionSubmenu: {
+					name: "Regrouper les actions de fin et d'omission dans un sous-menu",
+					description: "Place les actions permettant de terminer ou d'ignorer une tâche dans un sous-menu du menu contextuel. Désactivez cette option pour les afficher directement dans le menu."
 				},
 				propertyGroups: {
 					coreProperties: "PROPRIÉTÉS PRINCIPALES",
@@ -1967,7 +1978,7 @@ export const fr: TranslationTree = {
 				},
 				authToken: {
 					name: "Jeton d'authentification API",
-					description: "Jeton requis pour l'authentification API (laisser vide pour pas d'authentification)",
+					description: "Jeton TaskNotes, et non la clé API de votre fournisseur d’IA. Pour en générer un, activez l’API HTTP, laissez ce champ vide et redémarrez Obsidian. Copiez ensuite le jeton généré dans les paramètres d’authentification Bearer du client. Mettez les clients à jour chaque fois que ce jeton change.",
 					placeholder: "votre-jeton-secret"
 				},
 				mcp: {
@@ -2256,6 +2267,8 @@ export const fr: TranslationTree = {
 		refreshCache: "Actualiser le cache",
 		exportAllTasksIcs: "Exporter toutes les tâches en fichier ICS",
 		viewReleaseNotes: "Voir les notes de version",
+		startTimeTrackingCurrentTask: "Démarrer le suivi du temps pour la tâche actuelle",
+		stopTimeTrackingCurrentTask: "Arrêter le suivi du temps pour la tâche actuelle",
 		startTimeTrackingWithSelector: "Démarrer le suivi du temps (sélectionner une tâche)",
 		editTimeEntries: "Modifier les entrées de temps (sélectionner une tâche)",
 		createOrOpenTask: "Créer ou ouvrir une tâche",
@@ -2869,6 +2882,24 @@ export const fr: TranslationTree = {
 			markIncomplete: "Marquer comme incomplète pour cette date",
 			skipInstance: "Ignorer l'instance",
 			unskipInstance: "Ne plus ignorer l'instance",
+			completion: {
+				submenu: "Marquer comme terminée ou ignorer",
+				submenuCompleteOnly: "Marquer comme terminée",
+				completeToday: "Terminée aujourd'hui",
+				completeAsScheduled: "Terminée à la date planifiée",
+				completeOnDue: "Terminée à la date d'échéance",
+				completeOnPicked: "Terminée le (choisir une date)",
+				markIncomplete: "Marquer comme incomplète",
+				noScheduledDate: "Cette tâche n'a pas de date planifiée",
+				noDueDate: "Cette tâche n'a pas de date d'échéance",
+				noPickedDate: "Aucune date sélectionnée",
+				noCompletedStatus: "Aucun statut de tâche terminée n'est configuré",
+				pickDateTitle: "Choisir la date de fin",
+				completeFailure: "Impossible de mettre à jour la fin de la tâche : {message}",
+				clearInstancesConfirmTitle: "Effacer les instances enregistrées ?",
+				clearInstancesConfirmMessage: "La replanification effacera ces instances enregistrées comme terminées ou ignorées à la nouvelle date ou après celle-ci : {dates}. Elles ne seront plus marquées comme terminées ou ignorées. Continuer ?",
+				clearInstancesConfirmButton: "Replanifier et effacer"
+			},
 			quickReminders: {
 				atTime: "À l'heure de l'événement",
 				fiveMinutes: "5 minutes avant",
@@ -3100,7 +3131,8 @@ export const fr: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "1 rappel défini (cliquer pour gérer)",
 			reminderTooltipMany: "{count} rappels définis (cliquer pour gérer)",
-			projectTooltip: "Cette tâche est utilisée comme projet (cliquer pour filtrer les sous-tâches)",
+			projectTooltip: "Cette tâche est utilisée comme projet (cliquer pour afficher/masquer les sous-tâches)",
+			projectIndicatorTooltip: "Cette tâche est utilisée comme projet",
 			expandSubtasks: "Déplier les sous-tâches",
 			collapseSubtasks: "Replier les sous-tâches",
 			dueToday: "{label}: Aujourd'hui",

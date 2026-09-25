@@ -64,6 +64,7 @@ function createGoogleSyncPlugin(frontmatter: Record<string, unknown> = {}) {
 			},
 		},
 		fieldMapper: {
+			mapFromFrontmatter: (fm: Record<string, unknown>) => ({ ...fm }),
 			toUserField: jest.fn((field: string) => field),
 			mapToFrontmatter: jest.fn((taskData: Record<string, unknown>) => {
 				const mapped: Record<string, unknown> = {};
@@ -98,6 +99,7 @@ function createGoogleSyncPlugin(frontmatter: Record<string, unknown> = {}) {
 			trigger: jest.fn(),
 		},
 		loadData: jest.fn().mockImplementation(async () => pluginData),
+		loadPluginDataForSafeWrite: jest.fn().mockImplementation(async () => pluginData),
 		saveData: jest.fn().mockImplementation(async (data: Record<string, unknown>) => {
 			for (const key of Object.keys(pluginData)) {
 				delete pluginData[key];
@@ -130,6 +132,7 @@ describe("Issue #1696: Google Calendar recurring reschedule sync", () => {
 			googleCalendarEventId: "master-event-id",
 		} as TaskInfo;
 
+		Object.assign(frontmatter, task);
 		const updatedTask = await taskService.updateTask(task, {
 			scheduled: "2026-04-15",
 		});
@@ -202,7 +205,8 @@ describe("Issue #1696: Google Calendar recurring reschedule sync", () => {
 			"master-event-id",
 			expect.objectContaining({
 				recurrence: expect.arrayContaining(["EXDATE;VALUE=DATE:20260413"]),
-			})
+			}),
+			expect.any(Number)
 		);
 		expect(googleCalendarService.createEvent).toHaveBeenCalledWith(
 			"primary",
@@ -211,7 +215,8 @@ describe("Issue #1696: Google Calendar recurring reschedule sync", () => {
 				start: { date: "2026-04-15" },
 				end: { date: "2026-04-16" },
 				isAllDay: true,
-			})
+			}),
+			expect.any(Number)
 		);
 		expect(frontmatter.googleCalendarExceptionEventId).toBe("detached-exception-id");
 	});
@@ -248,7 +253,8 @@ describe("Issue #1696: Google Calendar recurring reschedule sync", () => {
 
 		expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith(
 			"primary",
-			"detached-exception-id"
+			"detached-exception-id",
+			expect.any(Number)
 		);
 		expect(frontmatter.googleCalendarExceptionEventId).toBeUndefined();
 	});
@@ -282,6 +288,36 @@ describe("Issue #1696: Google Calendar recurring reschedule sync", () => {
 		expect(updatedTask.googleCalendarExceptionOriginalScheduled).toBeUndefined();
 		expect(updatedTask.googleCalendarExceptionEventId).toBe("detached-exception-id");
 		expect(frontmatter.googleCalendarMovedOriginalDates).toEqual(["2026-04-13"]);
+		expect(frontmatter.googleCalendarExceptionOriginalScheduled).toBeUndefined();
+	});
+
+	it("does not flag a moved occurrence when the completions calendar advances scheduled (regression)", async () => {
+		const frontmatter: Record<string, unknown> = {};
+		const plugin = createGoogleSyncPlugin(frontmatter);
+		const taskService = new TaskService(plugin);
+		const task = {
+			path: "TaskNotes/Tasks/Collect medication.md",
+			title: "Collect medication",
+			status: "ready",
+			priority: "normal",
+			archived: false,
+			scheduled: "2026-04-13",
+			recurrence: "DTSTART:20260316;FREQ=WEEKLY;INTERVAL=4;BYDAY=MO",
+			recurrence_anchor: "scheduled",
+			complete_instances: [],
+			skipped_instances: [],
+			googleCalendarEventId: "master-event-id",
+		} as TaskInfo;
+
+		// Mirrors what the task edit modal's completions calendar sends: it checks off
+		// the current instance and advances `scheduled` to the next occurrence in the
+		// same update, unlike a manual drag-to-reschedule which only changes `scheduled`.
+		const updatedTask = await taskService.updateTask(task, {
+			complete_instances: ["2026-04-13"],
+			scheduled: "2026-05-11",
+		});
+
+		expect(updatedTask.googleCalendarExceptionOriginalScheduled).toBeUndefined();
 		expect(frontmatter.googleCalendarExceptionOriginalScheduled).toBeUndefined();
 	});
 });

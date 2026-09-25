@@ -14,6 +14,7 @@ import {
 	type TaskUpdateFieldMapper,
 } from "./taskUpdatePlanning";
 import { createTaskNotesLogger } from "../../utils/tasknotesLogger";
+import { processVaultFile, processVaultFrontMatter } from "../VaultMutationService";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Services/TaskService/TaskUpdateService" });
 
@@ -129,20 +130,43 @@ export class TaskUpdateService {
 				newPath = parentPath ? `${parentPath}/${newFilename}.md` : `${newFilename}.md`;
 			}
 
-			const recurrenceUpdates = buildTaskUpdateRecurrenceUpdates({
-				originalTask,
-				updates: taskUpdates,
-				maintainDueDateOffsetInRecurring: runtime.settings.maintainDueDateOffsetInRecurring,
-			});
+			let recurrenceUpdates: Partial<TaskInfo> = {};
 			const normalizedDetails = normalizeTaskUpdateDetails(taskUpdates);
 			let finalTags: string[] | undefined;
 			const dateModified = getCurrentTimestamp();
 			const currentDateString =
-				taskUpdates.status !== undefined && !originalTask.recurrence
-					? getCurrentDateString()
-					: "";
+				taskUpdates.status !== undefined ? getCurrentDateString() : "";
 
-			await runtime.app.fileManager.processFrontMatter(file, (frontmatter) => {
+			await processVaultFrontMatter(runtime.app, file, (frontmatter) => {
+				// Rebase the caller's named changes on the bytes Obsidian is about
+				// to modify. A modal's TaskInfo can predate an external completion.
+				const current = runtime.fieldMapper.mapFromFrontmatter(
+					frontmatter,
+					originalTask.path,
+					runtime.settings.storeTitleInFilename
+				);
+				originalTask = {
+					// Retain derived view/body context; persisted fields come from the fresh mapping.
+					id: originalTask.id,
+					basesData: originalTask.basesData,
+					details: originalTask.details,
+					blocking: originalTask.blocking,
+					isBlocked: originalTask.isBlocked,
+					isBlocking: originalTask.isBlocking,
+					hasSubtasks: originalTask.hasSubtasks,
+					path: originalTask.path,
+					title: originalTask.title,
+					status: originalTask.status,
+					priority: originalTask.priority,
+					archived: false,
+					...current,
+				};
+				recurrenceUpdates = buildTaskUpdateRecurrenceUpdates({
+					originalTask,
+					updates: taskUpdates,
+					maintainDueDateOffsetInRecurring:
+						runtime.settings.maintainDueDateOffsetInRecurring,
+				});
 				const frontmatterResult = applyTaskUpdateFrontmatterChange({
 					frontmatter,
 					originalTask,
@@ -174,14 +198,15 @@ export class TaskUpdateService {
 			if (normalizedDetails !== null) {
 				const targetFile = runtime.app.vault.getAbstractFileByPath(newPath);
 				if (targetFile instanceof TFile) {
-					const currentContent = await runtime.app.vault.read(targetFile);
-					const { frontmatter: frontmatterText } =
-						splitFrontmatterAndBody(currentContent);
-					const frontmatterBlock =
-						frontmatterText !== null ? `---\n${frontmatterText}\n---\n\n` : "";
-					const bodyContent = normalizedDetails.trimEnd();
-					const finalBody = bodyContent.length > 0 ? `${bodyContent}\n` : "";
-					await runtime.app.vault.modify(targetFile, `${frontmatterBlock}${finalBody}`);
+					await processVaultFile(runtime.app, targetFile, (currentContent) => {
+						const { frontmatter: frontmatterText } =
+							splitFrontmatterAndBody(currentContent);
+						const frontmatterBlock =
+							frontmatterText !== null ? `---\n${frontmatterText}\n---\n\n` : "";
+						const bodyContent = normalizedDetails.trimEnd();
+						const finalBody = bodyContent.length > 0 ? `${bodyContent}\n` : "";
+						return `${frontmatterBlock}${finalBody}`;
+					});
 				}
 			}
 

@@ -19,7 +19,8 @@ export class TaskLinkWidget extends WidgetType {
 		plugin: TaskNotesPlugin,
 		originalText: string,
 		displayText?: string,
-		targetDate: Date = createUTCDateFromLocalCalendarDate(new Date())
+		targetDate: Date = createUTCDateFromLocalCalendarDate(new Date()),
+		private subpath?: string
 	) {
 		super();
 		this.taskInfo = taskInfo;
@@ -43,7 +44,7 @@ export class TaskLinkWidget extends WidgetType {
 		const visibleProperties = convertInternalToUserProperties(internalProperties, this.plugin);
 
 		// Create a wrapper span with the tasknotes-plugin class for CSS scoping
-		const wrapper = activeDocument.createElement("span");
+		const wrapper = activeWindow.createSpan();
 		wrapper.className = "tasknotes-plugin tasknotes-inline-widget";
 		// Ensure wrapper displays inline to prevent line breaks
 		wrapper.classList.remove(
@@ -59,11 +60,27 @@ export class TaskLinkWidget extends WidgetType {
 		wrapper.classList.add("tn-static-display-inline-cccfa456");
 		wrapper.classList.add("tn-static-vertical-align-baseline-657d9c46");
 
+		// Keep CodeMirror from moving the selection onto the replaced link before
+		// the card receives its click/contextmenu event.
+		wrapper.addEventListener("pointerdown", (event) => {
+			event.stopPropagation();
+		});
+		wrapper.addEventListener("mousedown", (event) => {
+			event.stopPropagation();
+			if (event.button === 0) {
+				event.preventDefault();
+			}
+		});
+		wrapper.addEventListener("mouseup", (event) => {
+			event.stopPropagation();
+		});
+
 		// Use createTaskCard with inline layout
 		const card = createTaskCard(this.taskInfo, this.plugin, visibleProperties, {
 			layout: "inline",
 			targetDate: this.targetDate,
 			displayText: this.displayText,
+			navigationSubpath: this.subpath,
 		});
 
 		// Add card to wrapper
@@ -102,6 +119,8 @@ export class TaskLinkWidget extends WidgetType {
 			this.taskInfo.scheduled === other.taskInfo.scheduled &&
 			this.taskInfo.recurrence === other.taskInfo.recurrence &&
 			this.displayText === other.displayText &&
+			this.subpath === other.subpath &&
+			this.originalText === other.originalText &&
 			this.targetDateKey === other.targetDateKey &&
 			JSON.stringify(this.taskInfo.complete_instances) ===
 				JSON.stringify(other.taskInfo.complete_instances) &&

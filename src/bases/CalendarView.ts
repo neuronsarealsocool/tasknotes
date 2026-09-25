@@ -1,4 +1,5 @@
 import TaskNotesPlugin from "../main";
+import { createElementInDocument } from "../utils/documentDom";
 import type { BasesEntry, BasesView, BasesViewFactory } from "obsidian";
 import { BasesViewBase } from "./BasesViewBase";
 import type { TaskInfo } from "../types";
@@ -28,6 +29,7 @@ import {
 	handleTimeEntryCreation,
 	handleDateTitleClick,
 	getTargetDateForEvent,
+	getOccurrenceDateForEvent,
 	calculateTaskCreationValues,
 	generateTaskTooltip,
 	applyRecurringTaskStyling,
@@ -77,7 +79,7 @@ import {
 	getCalendarConfigValue as getCalendarConfigValueFromSnapshot,
 } from "./calendarConfigSnapshot";
 import { buildCalendarPropertyEvent } from "./calendarPropertyEvents";
-import { buildExternalCalendarEvents } from "./calendarExternalEvents";
+import { buildExternalCalendarEvents, setProviderCalendarToggle } from "./calendarExternalEvents";
 import {
 	decorateCalendarIcsEventElement,
 	getCalendarRelatedNoteTooltip,
@@ -87,6 +89,7 @@ import {
 } from "./calendarEventMount";
 import { CALENDAR_END_TIME_MAX_HOUR, normalizeCalendarTimeValue } from "../utils/calendarTime";
 import { filterEmptyProjects, sanitizeForCssClass } from "../utils/helpers";
+import { processVaultFrontMatter } from "../services/VaultMutationService";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Bases/CalendarView" });
@@ -176,7 +179,9 @@ export function getTaskNotesCalendarEventOrder(sortConfig: unknown): string {
 	if (!hasBasesCalendarSortConfig(sortConfig)) {
 		return DEFAULT_CALENDAR_EVENT_ORDER;
 	}
-	return `${TASKNOTES_CALENDAR_SORT_INDEX},${DEFAULT_CALENDAR_EVENT_ORDER}`;
+	// Bases ranks break ties at the same placement. They must not put a timed
+	// task ahead of an earlier appointment that has no Bases result index.
+	return `start,allDay,${TASKNOTES_CALENDAR_SORT_INDEX},-duration,title`;
 }
 
 function getCalendarEventSortPath(event: EventInput): string | null {
@@ -473,6 +478,7 @@ export class CalendarView extends BasesViewBase {
 		showTimeEntries: boolean;
 		showTimeblocks: boolean;
 		showPropertyBasedEvents: boolean;
+		showOverdueOnToday: boolean;
 
 		// Date navigation
 		initialDate: string;
@@ -540,6 +546,7 @@ export class CalendarView extends BasesViewBase {
 			showTimeEntries: calendarSettings.defaultShowTimeEntries,
 			showTimeblocks: calendarSettings.defaultShowTimeblocks,
 			showPropertyBasedEvents: true,
+			showOverdueOnToday: false,
 
 			// Date navigation
 			initialDate: "",
@@ -894,6 +901,10 @@ export class CalendarView extends BasesViewBase {
 				"showPropertyBasedEvents",
 				this.viewOptions.showPropertyBasedEvents
 			);
+			this.viewOptions.showOverdueOnToday = this.getConfigOption(
+				"showOverdueOnToday",
+				this.viewOptions.showOverdueOnToday
+			);
 
 			// ICS calendar toggles
 			if (this.plugin.icsSubscriptionService) {
@@ -909,7 +920,11 @@ export class CalendarView extends BasesViewBase {
 				const calendars = this.plugin.googleCalendarService.getAvailableCalendars();
 				for (const cal of calendars) {
 					const key = `showGoogleCalendar_${cal.id}`;
-					this.googleCalendarToggles.set(cal.id, this.getConfigOption(key, true));
+					setProviderCalendarToggle(
+						this.googleCalendarToggles,
+						cal,
+						this.getConfigOption(key, true)
+					);
 				}
 			}
 
@@ -1659,14 +1674,14 @@ export class CalendarView extends BasesViewBase {
 		this.calendarEl.classList.add("advanced-calendar-view__calendar--popout-blocked");
 
 		const doc = this.calendarEl.ownerDocument;
-		const noticeEl = doc.createElement("div");
+		const noticeEl = createElementInDocument(doc, "div");
 		noticeEl.className = "advanced-calendar-view__popout-blocked";
 
-		const titleEl = doc.createElement("h3");
+		const titleEl = createElementInDocument(doc, "h3");
 		titleEl.textContent = "Calendar view is unavailable in a separate window";
 		noticeEl.appendChild(titleEl);
 
-		const messageEl = doc.createElement("p");
+		const messageEl = createElementInDocument(doc, "p");
 		messageEl.textContent =
 			"Open this calendar view in the main Obsidian window. The calendar can freeze Obsidian when restored inside a separate window.";
 		noticeEl.appendChild(messageEl);
@@ -1811,8 +1826,11 @@ export class CalendarView extends BasesViewBase {
 			showTimeEntries: this.viewOptions.showTimeEntries,
 			showTimeblocks: this.viewOptions.showTimeblocks,
 			showICSEvents: false, // ICS handled separately
+			showOverdueOnToday: this.viewOptions.showOverdueOnToday,
 			visibleStart: fetchInfo.start,
 			visibleEnd: fetchInfo.end,
+			visibleStartDate: fetchInfo.startStr,
+			visibleEndDate: fetchInfo.endStr,
 		};
 
 		// Use existing calendar-core helper to generate task events
@@ -2180,7 +2198,7 @@ export class CalendarView extends BasesViewBase {
 				}
 
 				// Update frontmatter
-				await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+				await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 					const plan = planPropertyEventDrop({
 						frontmatter,
 						startProperty: startProp,
@@ -2313,7 +2331,8 @@ export class CalendarView extends BasesViewBase {
 						const scheduledField = this.plugin.fieldMapper.toUserField("scheduled");
 						const dueField = this.plugin.fieldMapper.toUserField("due");
 
-						await this.plugin.app.fileManager.processFrontMatter(
+						await processVaultFrontMatter(
+							this.plugin.app,
 							spanFile,
 							(frontmatter) => {
 								if (plan.scheduled) frontmatter[scheduledField] = plan.scheduled;
@@ -2416,7 +2435,7 @@ export class CalendarView extends BasesViewBase {
 				}
 
 				// Update frontmatter
-				await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+				await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 					for (const [property, value] of Object.entries(plan.updates)) {
 						frontmatter[property] = value;
 					}
@@ -2589,7 +2608,19 @@ export class CalendarView extends BasesViewBase {
 			this.calendar?.unselect();
 		});
 
-		if (info.jsEvent) {
+		const selectionEvent = info.jsEvent as Event | null;
+		if (selectionEvent && "changedTouches" in selectionEvent) {
+			// FullCalendar types jsEvent as MouseEvent, but touch selection ends with a TouchEvent.
+			// Obsidian's showAtMouseEvent reads mouse coordinates and places that menu off-screen.
+			const touchEvent = selectionEvent as TouchEvent;
+			const touch = touchEvent.changedTouches[0] ?? touchEvent.touches[0];
+			if (touch) {
+				menu.showAtPosition({ x: touch.clientX, y: touch.clientY });
+			} else {
+				const bounds = this.calendarEl?.getBoundingClientRect();
+				menu.showAtPosition({ x: bounds?.left ?? 0, y: bounds?.top ?? 0 });
+			}
+		} else if (info.jsEvent) {
 			menu.showAtMouseEvent(info.jsEvent);
 		} else {
 			menu.showAtPosition({ x: 0, y: 0 });
@@ -2753,6 +2784,7 @@ export class CalendarView extends BasesViewBase {
 					task: taskInfo,
 					plugin: this.plugin,
 					targetDate: targetDate,
+					occurrenceDate: getOccurrenceDateForEvent(taskInfo, arg),
 					promoteOccurrenceControls: Boolean(
 						taskInfo.recurrence ||
 							(taskInfo.recurrence_parent && taskInfo.occurrence_date)
@@ -2883,7 +2915,7 @@ export class CalendarView extends BasesViewBase {
 			const doc = this.containerEl.ownerDocument;
 
 			// Calendar element for FullCalendar to render into
-			const calendarEl = doc.createElement("div");
+			const calendarEl = createElementInDocument(doc, "div");
 			calendarEl.id = "bases-calendar";
 			calendarEl.classList.remove(
 				"tn-static-flex-1-97445a8d",
@@ -2946,7 +2978,7 @@ export class CalendarView extends BasesViewBase {
 
 		// Use correct document for pop-out window support
 		const doc = this.calendarEl.ownerDocument;
-		const errorEl = doc.createElement("div");
+		const errorEl = createElementInDocument(doc, "div");
 		errorEl.className = "tn-bases-error";
 		errorEl.classList.remove(
 			"tn-static-border-radius-4px-c290c56e",

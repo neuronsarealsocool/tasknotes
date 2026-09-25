@@ -235,6 +235,7 @@ export const ko: TranslationTree = {
 				events: {
 					showScheduledTasks: "예정된 작업 표시",
 					showDueTasks: "마감 작업 표시",
+					showOverdueOnToday: "기한이 지난 작업을 오늘에 표시",
 					showRecurringTasks: "반복 작업 표시",
 					showTimeEntries: "시간 기록 표시",
 					showTimeblocks: "타임블록 표시",
@@ -482,7 +483,7 @@ export const ko: TranslationTree = {
 			viewAllLink: "GitHub에서 모든 릴리스 노트 보기 →",
 			starMessage:
 				"모든 피드백을 정말 감사하게 생각합니다. 뭔가 맞지 않는 느낌이 들면 GitHub에서 알려 주세요. TaskNotes가 유용하다면 별표도 고려해 주세요.",
-			baseFilesNotice: "> [!info] 기본 `.base` 파일 안내\n> 기본으로 생성되는 `.base` 템플릿이 변경되어도 기존 `.base` 파일은 덮어쓰지 않으므로 사용자 설정이 유지됩니다.\n> 최신 템플릿 개선 사항을 적용하려면 **설정 → TaskNotes → 일반 → 보기 및 base 파일 → 파일 생성**에서 베이스 파일을 다시 생성하세요."
+			baseFilesNotice: "> [!info] 기본 `.base` 파일 안내\n> 기본으로 생성되는 `.base` 템플릿이 변경되어도 기존 `.base` 파일은 덮어쓰지 않으므로 사용자 설정이 유지됩니다.\n> 최신 템플릿 개선 사항을 적용하려면 **설정 → TaskNotes → 일반 → 보기 및 base 파일 → 파일 업데이트**에서 베이스 파일을 다시 생성하세요."
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const ko: TranslationTree = {
 				filenameUpdatesWithTitle: "작업 제목이 변경되면 파일명이 자동으로 업데이트됩니다.",
 				filenameFormat: "파일명 형식:",
 				customTemplate: "사용자 지정 템플릿:",
-				legacySyntaxWarning: "{title}과 같은 단일 중괄호 구문은 더 이상 사용되지 않습니다. 본문 템플릿과의 일관성을 위해 {{title}}과 같은 이중 중괄호 구문을 사용하세요."
+				legacySyntaxWarning: "{title}과 같은 단일 중괄호 구문은 더 이상 사용되지 않습니다. 본문 템플릿과의 일관성을 위해 {{title}}과 같은 이중 중괄호 구문을 사용하세요.",
+				occurrenceFilenameTemplate: "발생 항목 파일명 템플릿",
+				occurrenceFilenameTemplateHelp:
+					"반복 작업에서 구체화된 발생 항목의 파일명 템플릿입니다. 비워 두면 기존 이름(상위 작업 제목과 숫자 접미사)을 유지합니다. {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}}, {{occurrenceMonthName}} 중 하나로 파일명 단위를 명시적으로 선택하세요. 일반 파일명 변수도 모두 사용할 수 있습니다. 상위 작업은 아래에서 설정한 프론트매터 속성으로 이 템플릿을 재정의할 수 있습니다.",
+				occurrenceFilenameProperty: "발생 항목 템플릿 재정의 속성",
+				occurrenceFilenamePropertyHelp:
+					"반복 상위 작업에서 발생 항목 파일명 템플릿을 재정의하는 프론트매터 속성의 이름입니다."
 			},
 			tagsCard: {
 				nativeObsidianTags: "기본 Obsidian 태그 사용"
@@ -1284,6 +1291,10 @@ export const ko: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "기본 표시 속성",
 					description: "작업 카드에 기본으로 표시할 속성을 선택합니다."
+				},
+				completionSubmenu: {
+					name: "완료 및 건너뛰기 동작을 하위 메뉴로 묶기",
+					description: "작업의 컨텍스트 메뉴에서 완료 및 건너뛰기 동작을 하위 메뉴에 표시합니다. 끄면 메뉴에 바로 표시됩니다."
 				},
 				propertyGroups: {
 					coreProperties: "핵심 속성",
@@ -1951,7 +1962,7 @@ export const ko: TranslationTree = {
 				},
 				authToken: {
 					name: "API 인증 토큰",
-					description: "API 인증에 필요한 토큰 (인증 없이 사용하려면 비워두세요)",
+					description: "TaskNotes 토큰이며 AI 서비스 제공업체의 API 키가 아닙니다. 생성하려면 HTTP API를 활성화하고 이 필드를 비운 뒤 Obsidian을 다시 시작하세요. 생성된 토큰을 클라이언트의 Bearer 인증 설정에 복사하세요. 토큰이 변경될 때마다 클라이언트 설정도 업데이트하세요.",
 					placeholder: "비밀-토큰"
 				},
 				mcp: {
@@ -2240,6 +2251,8 @@ export const ko: TranslationTree = {
 		refreshCache: "캐시 새로고침",
 		exportAllTasksIcs: "모든 작업을 ICS 파일로 내보내기",
 		viewReleaseNotes: "릴리스 노트 보기",
+		startTimeTrackingCurrentTask: "현재 작업의 시간 추적 시작",
+		stopTimeTrackingCurrentTask: "현재 작업의 시간 추적 중지",
 		startTimeTrackingWithSelector: "시간 추적 시작 (작업 선택)",
 		editTimeEntries: "시간 기록 편집 (작업 선택)",
 		createOrOpenTask: "작업 만들기 또는 열기",
@@ -2853,6 +2866,24 @@ export const ko: TranslationTree = {
 			markIncomplete: "이 날짜에 미완료로 표시",
 			skipInstance: "인스턴스 건너뛰기",
 			unskipInstance: "인스턴스 건너뛰기 취소",
+			completion: {
+				submenu: "완료로 표시 또는 건너뛰기",
+				submenuCompleteOnly: "완료로 표시",
+				completeToday: "오늘 완료",
+				completeAsScheduled: "예정일에 완료",
+				completeOnDue: "마감일에 완료",
+				completeOnPicked: "선택한 날짜에 완료 (날짜 선택)",
+				markIncomplete: "미완료로 표시",
+				noScheduledDate: "이 작업에 예정일이 없습니다",
+				noDueDate: "이 작업에 마감일이 없습니다",
+				noPickedDate: "선택한 날짜가 없습니다",
+				noCompletedStatus: "완료 상태가 설정되어 있지 않습니다",
+				pickDateTitle: "완료 날짜 선택",
+				completeFailure: "작업 완료 상태를 업데이트하지 못했습니다: {message}",
+				clearInstancesConfirmTitle: "기록된 인스턴스를 지울까요?",
+				clearInstancesConfirmMessage: "일정을 변경하면 새 날짜 당일 또는 이후에 완료되거나 건너뛴 것으로 기록된 다음 인스턴스가 지워집니다: {dates}. 더 이상 완료 또는 건너뛰기로 표시되지 않습니다. 계속할까요?",
+				clearInstancesConfirmButton: "일정 변경 및 지우기"
+			},
 			quickReminders: {
 				atTime: "이벤트 시간에",
 				fiveMinutes: "5분 전",
@@ -3084,7 +3115,8 @@ export const ko: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "알림 1개 설정됨 (관리하려면 클릭)",
 			reminderTooltipMany: "{count}개 알림 설정됨 (관리하려면 클릭)",
-			projectTooltip: "이 작업은 프로젝트로 사용됩니다 (하위 작업을 필터링하려면 클릭)",
+			projectTooltip: "이 작업은 프로젝트로 사용됩니다 (클릭하여 하위 작업 표시/숨기기)",
+			projectIndicatorTooltip: "이 작업은 프로젝트로 사용됩니다",
 			expandSubtasks: "하위 작업 펼치기",
 			collapseSubtasks: "하위 작업 접기",
 			dueToday: "{label}: 오늘",

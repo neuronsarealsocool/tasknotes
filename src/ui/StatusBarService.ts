@@ -154,8 +154,9 @@ export class StatusBarService {
 	 * Get all currently tracked tasks (tasks with active time sessions)
 	 */
 	private async getTrackedTasks(): Promise<TaskInfo[]> {
-		// Force a fresh lookup of all tasks to avoid stale data
-		const allTasks = await this.plugin.cacheManager.getAllTasks();
+		// Status-bar refreshes are frequent, so keep this scan in memory. File events
+		// schedule another refresh after Obsidian updates its metadata cache.
+		const allTasks = this.plugin.cacheManager.getAllCachedTasks();
 
 		return allTasks.filter((task) => {
 			// Skip archived tasks
@@ -212,13 +213,13 @@ export class StatusBarService {
 		this.statusBarElement.empty();
 
 		// Create icon
-		const iconEl = this.statusBarElement.createEl("span", {
+		const iconEl = this.statusBarElement.createSpan({
 			cls: "tasknotes-status-icon",
 		});
 		setIcon(iconEl, "timer");
 
 		// Create text content
-		const textEl = this.statusBarElement.createEl("span", {
+		const textEl = this.statusBarElement.createSpan({
 			cls: "tasknotes-status-text",
 		});
 
@@ -265,12 +266,12 @@ export class StatusBarService {
 
 		this.pomodoroStatusBarElement.empty();
 
-		const iconEl = this.pomodoroStatusBarElement.createEl("span", {
+		const iconEl = this.pomodoroStatusBarElement.createSpan({
 			cls: "tasknotes-status-icon",
 		});
 		setIcon(iconEl, state.currentSession.type === "work" ? "timer" : "coffee");
 
-		const textEl = this.pomodoroStatusBarElement.createEl("span", {
+		const textEl = this.pomodoroStatusBarElement.createSpan({
 			cls: "tasknotes-status-text",
 		});
 		const timeRemaining = formatPomodoroTime(state.timeRemaining);

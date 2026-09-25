@@ -11,7 +11,7 @@ You can create and edit tasks in a variety of ways. The primary method is throug
 
 ![Task creation modal](../assets/feature-task-modal-filled.png)
 
-When creating a task, the title will be automatically sanitized to remove any characters that are forbidden in filenames.
+TaskNotes keeps a storage title and a filename-safe title separate. When **Store title in filename** is enabled, forbidden filename characters are removed from the filename while the task title is preserved whenever it cannot be represented exactly by that filename. With another filename format, such as timestamp or UUID, the full title is stored in frontmatter.
 
 For existing tasks, the **Quick actions for current task** command opens a keyboard-searchable action palette. It includes status, priority, time-tracking, archive, edit, and date actions, including built-in due and scheduled date presets such as today, tomorrow, this weekend, next week, and next month.
 
@@ -145,7 +145,9 @@ blockedBy:
 - `reltype` is stored with each dependency and defaults to `FINISHTOSTART` for dependencies created in the UI.
 - `gap` is optional and uses ISO&nbsp;8601 duration syntax (for example `PT4H` or `P2D`).
 
-Whenever a dependency is added, TaskNotes updates the upstream note’s `blocking` list so the reverse relationship stays synchronized. Removing a dependency automatically clears both sides.
+TaskNotes stores each dependency in the dependent task’s `blockedBy` field and derives the reverse “Blocking” relationship from it. For example, if Task B is blocked by Task A, B stores a reference to A; A does not need a separate `blocking` frontmatter property. Editing “Blocking” updates the selected dependent tasks’ `blockedBy` fields. Removing a dependency also removes the derived reverse relationship.
+
+Dependencies are separate from project/subtask membership: adding a blocker does not require adding either task to the other’s `projects` field. To view tasks blocked by the current note, use the Relationships widget’s **Blocking** view, which finds them through Bases without a stored `blocking` property.
 
 ### Selecting dependencies in the UI
 
@@ -177,6 +179,25 @@ These settings let you align task files with existing vault conventions (for exa
 
 For configuration details, see [Task Defaults](../settings/task-defaults.md).  
 For template variables, see [Template Variables Reference](template-variables.md).
+
+## Completing Tasks
+
+You can record a task's completion — and choose the date it is recorded against — directly from the task context menu, without opening the task. Four actions are offered:
+
+- **Completed today** — records today's date.
+- **Completed on schedule** — records the task's scheduled date (for a recurring task, the scheduled date of the occurrence you clicked).
+- **Completed on due date** — records the due date.
+- **Completed on (pick date)** — opens a date picker and records the date you choose.
+
+An action is disabled when the date it needs is not set — for example *Completed on schedule* on a task with no scheduled date — rather than silently falling back to another date. Recurring tasks also get a **Skip instance** action alongside these.
+
+By default the actions are grouped under a single **Mark complete or skip** entry (**Mark complete** for non-recurring tasks). To show them directly in the menu instead — set off by dividers — turn off **Settings → Appearance & UI → Task cards → Group complete and skip actions in a submenu**.
+
+![Completion actions grouped under a submenu (default)](../assets/feature-completion-date-actions.png)
+
+With the submenu grouping turned off, the same actions appear directly in the menu:
+
+![Completion actions shown flat in the menu](../assets/feature-completion-date-actions-flat.png)
 
 ## Recurring Tasks
 

@@ -35,6 +35,9 @@ import {
 } from "obsidian-daily-notes-interface";
 import { ICSEventInfoModal } from "../modals/ICSEventInfoModal";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
+import { createElementInDocument } from "../utils/documentDom";
+import { findProviderCalendar } from "../services/CalendarProvider";
+import { setProviderCalendarToggle } from "./calendarExternalEvents";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Bases/MiniCalendarView" });
 
@@ -208,8 +211,9 @@ export class MiniCalendarView extends BasesViewBase {
 
 		if (this.plugin.googleCalendarService) {
 			for (const calendar of this.plugin.googleCalendarService.getAvailableCalendars()) {
-				this.googleCalendarToggles.set(
-					calendar.id,
+				setProviderCalendarToggle(
+					this.googleCalendarToggles,
+					calendar,
 					getToggleValue(`showGoogleCalendar_${calendar.id}`)
 				);
 			}
@@ -446,17 +450,13 @@ export class MiniCalendarView extends BasesViewBase {
 			return;
 		}
 
-		const calendars = new Map(
-			this.plugin.googleCalendarService
-				.getAvailableCalendars()
-				.map((calendar) => [calendar.id, calendar])
-		);
+		const calendars = this.plugin.googleCalendarService.getAvailableCalendars();
 
 		for (const icsEvent of this.plugin.googleCalendarService.getAllEvents()) {
 			const calendarId = icsEvent.subscriptionId.replace("google-", "");
 			if (this.googleCalendarToggles.get(calendarId) === false) continue;
 
-			const calendar = calendars.get(calendarId);
+			const calendar = findProviderCalendar(calendars, calendarId);
 			this.indexExternalEvent(
 				icsEvent,
 				calendar?.summary || "Google Calendar",
@@ -1531,7 +1531,7 @@ export class MiniCalendarView extends BasesViewBase {
 
 		// Use correct document for pop-out window support
 		const doc = this.containerEl.ownerDocument;
-		const calendar = doc.createElement("div");
+		const calendar = createElementInDocument(doc, "div");
 		calendar.className = "mini-calendar-bases-view";
 		this.rootElement?.appendChild(calendar);
 		this.calendarEl = calendar;
@@ -1547,7 +1547,7 @@ export class MiniCalendarView extends BasesViewBase {
 
 		// Use correct document for pop-out window support
 		const doc = this.calendarEl.ownerDocument;
-		const errorEl = doc.createElement("div");
+		const errorEl = createElementInDocument(doc, "div");
 		errorEl.className = "tn-bases-error";
 		errorEl.classList.remove(
 			"tn-static-border-radius-4px-c290c56e",

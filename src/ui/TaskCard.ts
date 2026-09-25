@@ -47,6 +47,8 @@ export interface TaskCardOptions {
 	propertyLabels?: TaskCardPresentationOptions["propertyLabels"];
 	/** Optional title override for inline/embedded cards, such as wikilink aliases. */
 	displayText?: string;
+	/** Heading or block target retained by inline task links when opening the note. */
+	navigationSubpath?: string;
 	/** How expanded subtasks/dependencies should interact with the current view filter. */
 	expandedRelationshipFilterMode?: "inherit" | "show-all";
 	/** Optional live resolver for the current expanded relationship filter mode. */
@@ -131,7 +133,7 @@ export function createTaskCard(
 
 	// Main container with BEM class structure
 	// Use span for inline layout to ensure proper inline flow in CodeMirror
-	const card = activeDocument.createElement(layout === "inline" ? "span" : "div");
+	const card = activeWindow.createEl(layout === "inline" ? "span" : "div");
 
 	// Store task path for circular reference detection
 	const taskCardElement = card as TaskCardElement;
@@ -200,7 +202,7 @@ export function createTaskCard(
 
 	// Badge area for secondary indicators (only in non-inline mode)
 	const badgesContainer =
-		layout !== "inline" ? mainRow.createEl("div", { cls: "task-card__badges" }) : null;
+		layout !== "inline" ? mainRow.createDiv({ cls: "task-card__badges" }) : null;
 	const secondaryBadgeHandlers = createSecondaryBadgeHandlers(plugin);
 
 	renderTaskCardSecondaryBadges({
@@ -249,6 +251,7 @@ export function createTaskCard(
 		createTaskClickHandler({
 			task,
 			plugin,
+			navigationSubpath: opts.navigationSubpath,
 			contextMenuHandler: (e) => {
 				const path = card.dataset.taskPath;
 				if (!path) return;

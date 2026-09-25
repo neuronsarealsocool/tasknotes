@@ -261,6 +261,15 @@ export interface CardButton {
 	disabled?: boolean;
 }
 
+export const CARD_COLLAPSE_CHANGED = "tasknotes:card-collapse-changed";
+
+/** Update presentation without treating restoration as a user interaction. */
+export function setCardCollapsed(card: HTMLElement, collapsed: boolean): void {
+	card.classList.toggle("tasknotes-settings__card--collapsed", collapsed);
+	const header = card.querySelector<HTMLElement>(":scope > .tasknotes-settings__card-header");
+	if (header) header.title = collapsed ? "Expand card" : "Collapse card";
+}
+
 /**
  * Creates a deduplicated card component
  */
@@ -409,17 +418,11 @@ export function createCard(container: HTMLElement, config: CardConfig): HTMLElem
 		const toggleCollapse = () => {
 			const isCurrentlyCollapsed = card.hasClass("tasknotes-settings__card--collapsed");
 
-			if (isCurrentlyCollapsed) {
-				// Expand
-				card.removeClass("tasknotes-settings__card--collapsed");
-				header.title = "Collapse card";
-				config.onCollapseChange?.(false);
-			} else {
-				// Collapse
-				card.addClass("tasknotes-settings__card--collapsed");
-				header.title = "Expand card";
-				config.onCollapseChange?.(true);
-			}
+			const collapsed = !isCurrentlyCollapsed;
+			setCardCollapsed(card, collapsed);
+			// Record state before callbacks can rebuild or remove the card.
+			card.dispatchEvent(new CustomEvent(CARD_COLLAPSE_CHANGED, { bubbles: true }));
+			config.onCollapseChange?.(collapsed);
 		};
 
 		// Make entire header clickable
@@ -518,7 +521,7 @@ export function createStatusBadge(
 	text: string,
 	variant: "active" | "inactive" | "completed" | "default" = "default"
 ): HTMLElement {
-	const badge = activeDocument.createElement("span");
+	const badge = activeWindow.createSpan();
 	badge.addClass("tasknotes-settings__card-status-badge");
 	badge.addClass(`tasknotes-settings__card-status-badge--${variant}`);
 	badge.textContent = text;
@@ -548,7 +551,7 @@ export function createCardInput(
 	placeholder?: string,
 	value?: string
 ): HTMLInputElement {
-	const input = activeDocument.createElement("input");
+	const input = activeWindow.createEl("input");
 	input.type = type;
 	input.addClass("tasknotes-settings__card-input");
 
@@ -576,7 +579,7 @@ type ThemeColorTextInput = HTMLInputElement & {
 function ensureThemeColorDatalist(): void {
 	if (activeDocument.getElementById(THEME_COLOR_DATALIST_ID)) return;
 
-	const datalist = activeDocument.createElement("datalist");
+	const datalist = activeWindow.createEl("datalist");
 	datalist.id = THEME_COLOR_DATALIST_ID;
 	for (const value of THEME_COLOR_SUGGESTIONS) {
 		datalist.createEl("option", { value });
@@ -613,7 +616,7 @@ function configureNativeThemeColorPicker(input: ThemeColorTextInput): void {
 		return;
 	}
 
-	const picker = activeDocument.createElement("input");
+	const picker = activeWindow.createEl("input");
 	picker.type = "color";
 	picker.addClass(THEME_COLOR_NATIVE_PICKER_CLASS);
 	picker.value = hexColorForNativePicker(input.value) || THEME_COLOR_PICKER_FALLBACK;
@@ -672,7 +675,7 @@ export function createCardToggle(
 	initialValue = false,
 	onChange?: (value: boolean) => unknown
 ): HTMLElement {
-	const tempContainer = activeDocument.createElement("div");
+	const tempContainer = activeWindow.createDiv();
 	const setting = new Setting(tempContainer);
 
 	let toggleEl: HTMLElement | null = null;
@@ -700,7 +703,7 @@ export function createCardSelect(
 	options: Array<{ value: string; label: string }>,
 	selectedValue?: string
 ): HTMLSelectElement {
-	const select = activeDocument.createElement("select");
+	const select = activeWindow.createEl("select");
 	select.addClass("tasknotes-settings__card-input");
 
 	options.forEach((option) => {
@@ -821,7 +824,7 @@ export function createCardTextarea(
 	value?: string,
 	rows = 3
 ): HTMLTextAreaElement {
-	const textarea = activeDocument.createElement("textarea");
+	const textarea = activeWindow.createEl("textarea");
 	textarea.addClass("tasknotes-settings__card-input");
 	textarea.rows = rows;
 
@@ -888,7 +891,7 @@ export function normalizeCalendarUrl(url: string): string {
  * http/https when the URL is saved.
  */
 export function createCardUrlInput(placeholder?: string, value?: string): HTMLInputElement {
-	const input = activeDocument.createElement("input");
+	const input = activeWindow.createEl("input");
 	// Use type="text" instead of type="url" to allow webcal:// and webcals:// protocols
 	// HTML5 type="url" validation only accepts http://, https://, and ftp://
 	input.type = "text";
@@ -927,7 +930,7 @@ export function createSimpleCard(container: HTMLElement, rows: CardRow[]): HTMLE
  * Creates an info badge for displaying read-only information
  */
 export function createInfoBadge(text: string): HTMLElement {
-	const badge = activeDocument.createElement("span");
+	const badge = activeWindow.createSpan();
 	badge.addClass("tasknotes-settings__card-info-badge");
 	badge.textContent = text;
 	return badge;

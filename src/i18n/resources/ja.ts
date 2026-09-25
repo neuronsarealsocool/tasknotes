@@ -235,6 +235,7 @@ export const ja: TranslationTree = {
 				events: {
 					showScheduledTasks: "予定されたタスクを表示",
 					showDueTasks: "期限のあるタスクを表示",
+					showOverdueOnToday: "期限切れタスクを今日に表示",
 					showRecurringTasks: "繰り返しタスクを表示",
 					showTimeEntries: "時間エントリを表示",
 					showTimeblocks: "タイムブロックを表示",
@@ -482,7 +483,7 @@ export const ja: TranslationTree = {
 			viewAllLink: "GitHubですべてのリリースノートを表示 →",
 			starMessage:
 				"どんなフィードバックも本当にありがたいです。何か違和感があれば、GitHubでお知らせください。TaskNotesが役に立ったら、スターもご検討ください。",
-			baseFilesNotice: "> [!info] デフォルトの `.base` ファイルについて\n> デフォルトで生成される `.base` テンプレートの変更で、既存の `.base` ファイルが上書きされることはありません。カスタマイズはそのまま保持されます。\n> 最新のテンプレート改善を反映したい場合は、**設定 → TaskNotes → 一般 → ビューとbaseファイル → ファイルを作成** からベースファイルを再生成してください。"
+			baseFilesNotice: "> [!info] デフォルトの `.base` ファイルについて\n> デフォルトで生成される `.base` テンプレートの変更で、既存の `.base` ファイルが上書きされることはありません。カスタマイズはそのまま保持されます。\n> 最新のテンプレート改善を反映したい場合は、**設定 → TaskNotes → 一般 → ビューとbaseファイル → ファイルを更新** からベースファイルを再生成してください。"
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const ja: TranslationTree = {
 				filenameUpdatesWithTitle: "タスクタイトルが変更されると、ファイル名は自動的に更新されます。",
 				filenameFormat: "ファイル名形式:",
 				customTemplate: "カスタムテンプレート:",
-				legacySyntaxWarning: "{title}のような単一波括弧構文は非推奨です。本文テンプレートとの一貫性のために、{{title}}のような二重波括弧構文を使用してください。"
+				legacySyntaxWarning: "{title}のような単一波括弧構文は非推奨です。本文テンプレートとの一貫性のために、{{title}}のような二重波括弧構文を使用してください。",
+				occurrenceFilenameTemplate: "オカレンスのファイル名テンプレート",
+				occurrenceFilenameTemplateHelp:
+					"繰り返しタスクから実体化されたオカレンス用のファイル名テンプレートです。空欄にすると、既存の名前（親タスクのタイトルと連番のサフィックス）が維持されます。{{occurrenceDate}}、{{occurrenceWeek}}、{{occurrenceMonth}}、{{occurrenceYear}}、{{occurrenceMonthName}}のいずれかを使って粒度を明示的に選択してください。通常のファイル名変数もすべて使用できます。親タスクは、下で設定するフロントマターのプロパティを使ってこのテンプレートを上書きできます。",
+				occurrenceFilenameProperty: "オカレンステンプレートの上書きプロパティ",
+				occurrenceFilenamePropertyHelp:
+					"繰り返し親タスクで、そのオカレンスのファイル名テンプレートを上書きするフロントマタープロパティの名前です。"
 			},
 			tagsCard: {
 				nativeObsidianTags: "ネイティブObsidianタグを使用"
@@ -1288,6 +1295,10 @@ export const ja: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "デフォルト表示プロパティ",
 					description: "タスクカードにデフォルトで表示するプロパティを選択します。"
+				},
+				completionSubmenu: {
+					name: "完了とスキップの操作をサブメニューにまとめる",
+					description: "完了とスキップの操作をタスクのコンテキストメニュー内のサブメニューに表示します。無効にすると、メニューに直接表示されます。"
 				},
 				propertyGroups: {
 					coreProperties: "コアプロパティ",
@@ -1967,7 +1978,7 @@ export const ja: TranslationTree = {
 				},
 				authToken: {
 					name: "API認証トークン",
-					description: "API認証に必要なトークン（認証なしの場合は空白のままにする）",
+					description: "TaskNotesのトークンです。AIプロバイダーのAPIキーではありません。生成するにはHTTP APIを有効にし、この欄を空にしてObsidianを再起動してください。生成されたトークンをクライアントのBearer認証設定にコピーします。トークンを変更したら、各クライアントの設定も更新してください。",
 					placeholder: "あなたのシークレットトークン"
 				},
 				mcp: {
@@ -2256,6 +2267,8 @@ export const ja: TranslationTree = {
 		refreshCache: "キャッシュを更新",
 		exportAllTasksIcs: "すべてのタスクをICSファイルとしてエクスポート",
 		viewReleaseNotes: "リリースノートを表示",
+		startTimeTrackingCurrentTask: "現在のタスクの時間追跡を開始",
+		stopTimeTrackingCurrentTask: "現在のタスクの時間追跡を停止",
 		startTimeTrackingWithSelector: "時間追跡を開始（タスクを選択）",
 		editTimeEntries: "時間エントリを編集（タスクを選択）",
 		createOrOpenTask: "タスクを作成または開く",
@@ -2869,6 +2882,24 @@ export const ja: TranslationTree = {
 			markIncomplete: "この日付で未完了としてマーク",
 			skipInstance: "インスタンスをスキップ",
 			unskipInstance: "インスタンスのスキップを解除",
+			completion: {
+				submenu: "完了としてマークまたはスキップ",
+				submenuCompleteOnly: "完了としてマーク",
+				completeToday: "今日完了",
+				completeAsScheduled: "予定日に完了",
+				completeOnDue: "期限日に完了",
+				completeOnPicked: "指定日に完了（日付を選択）",
+				markIncomplete: "未完了としてマーク",
+				noScheduledDate: "このタスクには予定日が設定されていません",
+				noDueDate: "このタスクには期限日が設定されていません",
+				noPickedDate: "日付が選択されていません",
+				noCompletedStatus: "完了ステータスが設定されていません",
+				pickDateTitle: "完了日を選択",
+				completeFailure: "タスクの完了状態を更新できませんでした: {message}",
+				clearInstancesConfirmTitle: "記録されたインスタンスを消去しますか？",
+				clearInstancesConfirmMessage: "予定を変更すると、新しい日付以降に完了またはスキップとして記録された次のインスタンスが消去されます: {dates}。これらは完了またはスキップとしてマークされなくなります。続行しますか？",
+				clearInstancesConfirmButton: "予定を変更して消去"
+			},
 			quickReminders: {
 				atTime: "イベント時刻に",
 				fiveMinutes: "5分前",
@@ -3100,7 +3131,8 @@ export const ja: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "リマインダーが1件設定されています (クリックして管理)",
 			reminderTooltipMany: "{count}件のリマインダーが設定されています (クリックして管理)",
-			projectTooltip: "このタスクはプロジェクトとして使用されています（サブタスクをフィルタするにはクリック）",
+			projectTooltip: "このタスクはプロジェクトとして使用されています（クリックでサブタスクを表示/非表示）",
+			projectIndicatorTooltip: "このタスクはプロジェクトとして使用されています",
 			expandSubtasks: "サブタスクを展開",
 			collapseSubtasks: "サブタスクを折りたたむ",
 			dueToday: "{label}: 今日",

@@ -29,6 +29,9 @@ export interface ICSTemplateData {
  * Options for processing folder templates
  */
 export interface FolderTemplateOptions {
+	/** Literal current-note values, expanded after date and task variables. */
+	currentNote?: { path: string; title: string };
+
 	/**
 	 * Date to use for date-based template variables
 	 * @default new Date()
@@ -165,6 +168,22 @@ function getProjectFilePath(
 }
 
 /**
+ * Get the folder that contains a project note, i.e. the project file path with
+ * its final (basename) segment removed. Returns an empty string when the
+ * project note lives at the top level with no containing folder.
+ */
+function getProjectFolder(
+	project: string,
+	extractProjectFilePath?: (project: string) => string
+): string {
+	const filePath = getProjectFilePath(project, extractProjectFilePath);
+	if (!filePath) {
+		return "";
+	}
+	return filePath.split("/").slice(0, -1).join("/");
+}
+
+/**
  * Process a folder path template by replacing template variables with actual values
  *
  * Supported template variables:
@@ -188,6 +207,7 @@ function getProjectFilePath(
  * - {{context}}, {{contexts}} - First context or all contexts joined with /
  * - {{project}}, {{projects}} - First project or all projects joined with /
  * - {{projectFilePath}}, {{projectFilePaths}} - First project path or all project paths joined with /
+ * - {{projectFolder}}, {{projectFolders}} - Folder containing the first project note or all project folders joined with /
  * - {{priority}}, {{priorityShort}}
  * - {{status}}, {{statusShort}}
  * - {{title}}, {{titleLower}}, {{titleUpper}}, {{titleSnake}}, {{titleKebab}}, {{titleCamel}}, {{titlePascal}}
@@ -287,6 +307,22 @@ export function processFolderTemplate(
 						.join("/")
 				: "";
 		processedPath = processedPath.replace(/\{\{projectFilePaths\}\}/g, projectFilePaths);
+
+		// Handle project folder (folder containing the first project note)
+		const projectFolder =
+			Array.isArray(taskData.projects) && taskData.projects.length > 0
+				? getProjectFolder(taskData.projects[0], extractProjectFilePath)
+				: "";
+		processedPath = processedPath.replace(/\{\{projectFolder\}\}/g, projectFolder);
+
+		const projectFolders =
+			Array.isArray(taskData.projects) && taskData.projects.length > 0
+				? taskData.projects
+						.map((proj) => getProjectFolder(proj, extractProjectFilePath))
+						.filter((folder) => folder.length > 0)
+						.join("/")
+				: "";
+		processedPath = processedPath.replace(/\{\{projectFolders\}\}/g, projectFolders);
 
 		// Handle multiple contexts
 		const contexts =
@@ -461,6 +497,14 @@ export function processFolderTemplate(
 
 	const nanoId = Date.now().toString() + Math.random().toString(36).substring(2, 7);
 	processedPath = processedPath.replace(/\{\{nano\}\}/g, nanoId);
+
+	if (options.currentNote) {
+		const currentNote = options.currentNote;
+		processedPath = processedPath.replace(
+			/\{\{currentNote(Path|Title)\}\}/g,
+			(_match, field: string) => field === "Path" ? currentNote.path : currentNote.title
+		);
+	}
 
 	return shouldNormalizeRelativeSegments
 		? normalizeRelativeFolderPath(processedPath)

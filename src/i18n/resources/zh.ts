@@ -235,6 +235,7 @@ export const zh: TranslationTree = {
 				events: {
 					showScheduledTasks: "显示计划任务",
 					showDueTasks: "显示到期任务",
+					showOverdueOnToday: "在今天显示逾期任务",
 					showRecurringTasks: "显示重复任务",
 					showTimeEntries: "显示时间条目",
 					showTimeblocks: "显示时间块",
@@ -482,7 +483,7 @@ export const zh: TranslationTree = {
 			viewAllLink: "在 GitHub 上查看所有版本说明 →",
 			starMessage:
 				"我们非常感谢所有反馈。如果有什么感觉不对，请在 GitHub 上告诉我们。如果你觉得 TaskNotes 有用，请考虑给它加星。",
-			baseFilesNotice: "> [!info] 关于默认 `.base` 文件\n> 默认生成的 `.base` 模板更新不会覆盖你现有的 `.base` 文件，因此你的自定义会被保留。\n> 如果你希望获得最新模板改进，请在 **设置 → TaskNotes → 常规 → 视图与 base 文件 → 创建文件** 中重新生成 base 文件。"
+			baseFilesNotice: "> [!info] 关于默认 `.base` 文件\n> 默认生成的 `.base` 模板更新不会覆盖你现有的 `.base` 文件，因此你的自定义会被保留。\n> 如果你希望获得最新模板改进，请在 **设置 → TaskNotes → 常规 → 视图与 base 文件 → 更新文件** 中重新生成 base 文件。"
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const zh: TranslationTree = {
 				filenameUpdatesWithTitle: "文件名将在任务标题更改时自动更新。",
 				filenameFormat: "文件名格式：",
 				customTemplate: "自定义模板：",
-				legacySyntaxWarning: "像 {title} 这样的单花括号语法已弃用。请使用双花括号语法 {{title}} 以与正文模板保持一致。"
+				legacySyntaxWarning: "像 {title} 这样的单花括号语法已弃用。请使用双花括号语法 {{title}} 以与正文模板保持一致。",
+				occurrenceFilenameTemplate: "实例文件名模板",
+				occurrenceFilenameTemplateHelp:
+					"用于周期性任务实体化实例的文件名模板。留空可保留现有命名方式（父任务标题加数字后缀）。请使用 {{occurrenceDate}}、{{occurrenceWeek}}、{{occurrenceMonth}}、{{occurrenceYear}} 或 {{occurrenceMonthName}} 明确选择文件名粒度。所有常规文件名变量也可使用。父任务可以通过下方配置的 frontmatter 属性覆盖此模板。",
+				occurrenceFilenameProperty: "实例模板覆盖属性",
+				occurrenceFilenamePropertyHelp:
+					"周期性父任务中用于覆盖其实例文件名模板的 frontmatter 属性名称。"
 			},
 			tagsCard: {
 				nativeObsidianTags: "使用原生Obsidian标签"
@@ -1288,6 +1295,10 @@ export const zh: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "默认可见属性",
 					description: "选择默认在任务卡片上显示的属性。"
+				},
+				completionSubmenu: {
+					name: "将完成和跳过操作归入子菜单",
+					description: "在任务右键菜单的子菜单中显示完成和跳过操作。关闭后，这些操作将直接显示在菜单中。"
 				},
 				propertyGroups: {
 					coreProperties: "核心属性",
@@ -1967,7 +1978,7 @@ export const zh: TranslationTree = {
 				},
 				authToken: {
 					name: "API认证令牌",
-					description: "API认证所需的令牌（留空表示无认证）",
+					description: "这是TaskNotes令牌，不是AI服务提供商的API密钥。要生成令牌，请启用HTTP API，将此字段留空，然后重启Obsidian。随后将生成的令牌复制到客户端的Bearer认证设置中。每次更改令牌后，都需要更新客户端设置。",
 					placeholder: "你的秘密令牌"
 				},
 				mcp: {
@@ -2256,6 +2267,8 @@ export const zh: TranslationTree = {
 		refreshCache: "刷新缓存",
 		exportAllTasksIcs: "导出所有任务为ICS文件",
 		viewReleaseNotes: "查看版本说明",
+		startTimeTrackingCurrentTask: "开始跟踪当前任务的时间",
+		stopTimeTrackingCurrentTask: "停止跟踪当前任务的时间",
 		startTimeTrackingWithSelector: "开始时间跟踪（选择任务）",
 		editTimeEntries: "编辑时间条目（选择任务）",
 		createOrOpenTask: "创建或打开任务",
@@ -2868,6 +2881,24 @@ export const zh: TranslationTree = {
 			markIncomplete: "标记此日期未完成",
 			skipInstance: "跳过实例",
 			unskipInstance: "取消跳过实例",
+			completion: {
+				submenu: "标记完成或跳过",
+				submenuCompleteOnly: "标记完成",
+				completeToday: "今天完成",
+				completeAsScheduled: "在计划日期完成",
+				completeOnDue: "在截止日期完成",
+				completeOnPicked: "在指定日期完成（选择日期）",
+				markIncomplete: "标记未完成",
+				noScheduledDate: "此任务没有计划日期",
+				noDueDate: "此任务没有截止日期",
+				noPickedDate: "未选择日期",
+				noCompletedStatus: "未配置已完成状态",
+				pickDateTitle: "选择完成日期",
+				completeFailure: "无法更新任务完成状态：{message}",
+				clearInstancesConfirmTitle: "清除已记录的实例？",
+				clearInstancesConfirmMessage: "重新安排将清除新日期当天及之后记录为已完成或已跳过的以下实例：{dates}。它们将不再标记为已完成或已跳过。是否继续？",
+				clearInstancesConfirmButton: "重新安排并清除"
+			},
 			quickReminders: {
 				atTime: "在事件时间",
 				fiveMinutes: "提前5分钟",
@@ -3099,7 +3130,8 @@ export const zh: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "已设置 1 个提醒（点击管理）",
 			reminderTooltipMany: "已设置 {count} 个提醒（点击管理）",
-			projectTooltip: "此任务用作项目（点击可筛选子任务）",
+			projectTooltip: "此任务用作项目（点击可显示/隐藏子任务）",
+			projectIndicatorTooltip: "此任务用作项目",
 			expandSubtasks: "展开子任务",
 			collapseSubtasks: "折叠子任务",
 			dueToday: "{label}: 今天",

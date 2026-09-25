@@ -235,6 +235,7 @@ export const de: TranslationTree = {
 				events: {
 					showScheduledTasks: "Geplante Aufgaben anzeigen",
 					showDueTasks: "Fällige Aufgaben anzeigen",
+					showOverdueOnToday: "Überfällige Aufgaben heute anzeigen",
 					showRecurringTasks: "Wiederkehrende Aufgaben anzeigen",
 					showTimeEntries: "Zeiteinträge anzeigen",
 					showTimeblocks: "Zeitblöcke anzeigen",
@@ -482,7 +483,7 @@ export const de: TranslationTree = {
 			viewAllLink: "Alle Versionshinweise auf GitHub anzeigen →",
 			starMessage:
 				"Wir freuen uns sehr über jedes Feedback. Wenn sich etwas nicht richtig anfühlt, lassen Sie es uns bitte auf GitHub wissen. Wenn Sie TaskNotes nützlich finden, geben Sie ihm bitte einen Stern.",
-			baseFilesNotice: "> [!info] Hinweis zu den standardmäßigen `.base`-Dateien\n> Änderungen an standardmäßig generierten `.base`-Vorlagen überschreiben Ihre vorhandenen `.base`-Dateien nicht, damit Ihre Anpassungen erhalten bleiben.\n> Wenn Sie die neuesten Vorlagenverbesserungen möchten, erstellen Sie die Base-Dateien neu unter **Einstellungen → TaskNotes → Allgemein → Ansichten & Base-Dateien → Dateien erstellen**."
+			baseFilesNotice: "> [!info] Hinweis zu den standardmäßigen `.base`-Dateien\n> Änderungen an standardmäßig generierten `.base`-Vorlagen überschreiben Ihre vorhandenen `.base`-Dateien nicht, damit Ihre Anpassungen erhalten bleiben.\n> Wenn Sie die neuesten Vorlagenverbesserungen möchten, erstellen Sie die Base-Dateien neu unter **Einstellungen → TaskNotes → Allgemein → Ansichten & Base-Dateien → Dateien aktualisieren**."
 		}
 	},
 	settings: {
@@ -1112,7 +1113,13 @@ export const de: TranslationTree = {
 				filenameUpdatesWithTitle: "Der Dateiname wird automatisch aktualisiert, wenn sich der Aufgabentitel ändert.",
 				filenameFormat: "Dateinamenformat:",
 				customTemplate: "Benutzerdefinierte Vorlage:",
-				legacySyntaxWarning: "Die Syntax mit einfachen Klammern wie {title} ist veraltet. Bitte verwenden Sie stattdessen die Syntax mit doppelten Klammern {{title}} für Konsistenz mit Body-Vorlagen."
+				legacySyntaxWarning: "Die Syntax mit einfachen Klammern wie {title} ist veraltet. Bitte verwenden Sie stattdessen die Syntax mit doppelten Klammern {{title}} für Konsistenz mit Body-Vorlagen.",
+				occurrenceFilenameTemplate: "Dateinamenvorlage für Vorkommen",
+				occurrenceFilenameTemplateHelp:
+					"Dateinamenvorlage für materialisierte Vorkommen wiederkehrender Aufgaben. Leer lassen, um den bisherigen Namen beizubehalten (Titel der übergeordneten Aufgabe plus Zahlensuffix). Wähle die Granularität ausdrücklich mit {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}} oder {{occurrenceMonthName}}. Alle regulären Dateinamensvariablen funktionieren ebenfalls. Eine übergeordnete Aufgabe kann diese Vorlage über die unten konfigurierte Frontmatter-Eigenschaft überschreiben.",
+				occurrenceFilenameProperty: "Override-Eigenschaft für Vorkommensvorlagen",
+				occurrenceFilenamePropertyHelp:
+					"Name der Frontmatter-Eigenschaft einer wiederkehrenden übergeordneten Aufgabe, die die Dateinamenvorlage ihrer Vorkommen überschreibt."
 			},
 			tagsCard: {
 				nativeObsidianTags: "Verwendet native Obsidian-Tags"
@@ -1288,6 +1295,10 @@ export const de: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "Standard sichtbare Eigenschaften",
 					description: "Wähle, welche Eigenschaften standardmäßig auf Aufgabenkarten erscheinen."
+				},
+				completionSubmenu: {
+					name: "Abschluss- und Überspringen-Aktionen in einem Untermenü gruppieren",
+					description: "Zeige die Aktionen zum Abschließen und Überspringen in einem Untermenü des Aufgaben-Kontextmenüs. Deaktiviere diese Option, um sie direkt im Menü anzuzeigen."
 				},
 				propertyGroups: {
 					coreProperties: "KERNEIGENSCHAFTEN",
@@ -1967,7 +1978,7 @@ export const de: TranslationTree = {
 				},
 				authToken: {
 					name: "API-Authentifizierungstoken",
-					description: "Token für API-Authentifizierung erforderlich (leer lassen für keine Authentifizierung)",
+					description: "TaskNotes-Token, nicht der API-Schlüssel Ihres KI-Anbieters. Zum Erstellen HTTP-API aktivieren, dieses Feld leer lassen und Obsidian neu starten. Anschließend das erzeugte Token in die Bearer-Authentifizierungseinstellungen des Clients kopieren. Bei jeder Token-Änderung die Clients aktualisieren.",
 					placeholder: "dein-geheimes-token"
 				},
 				mcp: {
@@ -2256,6 +2267,8 @@ export const de: TranslationTree = {
 		refreshCache: "Cache aktualisieren",
 		exportAllTasksIcs: "Alle Aufgaben als ICS-Datei exportieren",
 		viewReleaseNotes: "Versionshinweise anzeigen",
+		startTimeTrackingCurrentTask: "Zeiterfassung für die aktuelle Aufgabe starten",
+		stopTimeTrackingCurrentTask: "Zeiterfassung für die aktuelle Aufgabe stoppen",
 		startTimeTrackingWithSelector: "Zeiterfassung starten (Aufgabe auswählen)",
 		editTimeEntries: "Zeiteinträge bearbeiten (Aufgabe auswählen)",
 		createOrOpenTask: "Aufgabe erstellen oder öffnen",
@@ -2869,6 +2882,24 @@ export const de: TranslationTree = {
 			markIncomplete: "Als unvollständig für dieses Datum markieren",
 			skipInstance: "Instanz überspringen",
 			unskipInstance: "Instanz nicht überspringen",
+			completion: {
+				submenu: "Als abgeschlossen markieren oder überspringen",
+				submenuCompleteOnly: "Als abgeschlossen markieren",
+				completeToday: "Heute abgeschlossen",
+				completeAsScheduled: "Am geplanten Datum abgeschlossen",
+				completeOnDue: "Am Fälligkeitsdatum abgeschlossen",
+				completeOnPicked: "Abgeschlossen am (Datum wählen)",
+				markIncomplete: "Als unvollständig markieren",
+				noScheduledDate: "Für diese Aufgabe ist kein geplantes Datum festgelegt",
+				noDueDate: "Für diese Aufgabe ist kein Fälligkeitsdatum festgelegt",
+				noPickedDate: "Kein Datum ausgewählt",
+				noCompletedStatus: "Kein Status für abgeschlossene Aufgaben konfiguriert",
+				pickDateTitle: "Abschlussdatum wählen",
+				completeFailure: "Aufgabenabschluss konnte nicht aktualisiert werden: {message}",
+				clearInstancesConfirmTitle: "Aufgezeichnete Instanzen löschen?",
+				clearInstancesConfirmMessage: "Durch die Neuplanung werden diese aufgezeichneten abgeschlossenen oder übersprungenen Instanzen am oder nach dem neuen Datum gelöscht: {dates}. Sie werden nicht mehr als abgeschlossen oder übersprungen markiert sein. Fortfahren?",
+				clearInstancesConfirmButton: "Neu planen und löschen"
+			},
 			quickReminders: {
 				atTime: "Zur Zeit des Events",
 				fiveMinutes: "5 Minuten vorher",
@@ -3100,7 +3131,8 @@ export const de: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "1 Erinnerung gesetzt (zum Verwalten klicken)",
 			reminderTooltipMany: "{count} Erinnerungen gesetzt (zum Verwalten klicken)",
-			projectTooltip: "Diese Aufgabe wird als Projekt verwendet (zum Filtern von Unteraufgaben klicken)",
+			projectTooltip: "Diese Aufgabe wird als Projekt verwendet (zum Ein-/Ausblenden von Unteraufgaben klicken)",
+			projectIndicatorTooltip: "Diese Aufgabe wird als Projekt verwendet",
 			expandSubtasks: "Unteraufgaben ausklappen",
 			collapseSubtasks: "Unteraufgaben einklappen",
 			dueToday: "{label}: Heute",

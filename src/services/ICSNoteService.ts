@@ -14,6 +14,8 @@ import { processTemplate, ICSTemplateData } from "../utils/templateProcessor";
 import type { InterpolationValues, TranslationKey } from "../i18n";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 import { publishUserNotice } from "../core/userNotices";
+import { processVaultFrontMatter } from "./VaultMutationService";
+import { findProviderCalendar } from "./CalendarProvider";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Services/ICSNoteService" });
 
@@ -59,10 +61,9 @@ export class ICSNoteService {
 			.find((event) => event.id === trimmedEventId);
 		if (googleEvent) {
 			const calendarId = googleEvent.subscriptionId.replace("google-", "");
+			const calendars = this.plugin.googleCalendarService?.getAvailableCalendars() ?? [];
 			const subscriptionName =
-				this.plugin.googleCalendarService
-					?.getAvailableCalendars()
-					.find((calendar) => calendar.id === calendarId)?.summary || "Google Calendar";
+				findProviderCalendar(calendars, calendarId)?.summary || "Google Calendar";
 			return { event: googleEvent, subscriptionName };
 		}
 
@@ -608,17 +609,16 @@ export class ICSNoteService {
 			}
 
 			// Update the note's frontmatter to include the ICS event ID
-			await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+			await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 				const icsEventIdField = this.plugin.fieldMapper.toUserField("icsEventId");
 
 				// Get existing ICS event IDs or create new array
-				let existingIds = frontmatter[icsEventIdField];
-				if (!existingIds) {
-					existingIds = [];
-				} else if (!Array.isArray(existingIds)) {
-					// Convert single value to array for backwards compatibility
-					existingIds = [existingIds];
-				}
+				const existingValue = frontmatter[icsEventIdField];
+				const existingIds: unknown[] = !existingValue
+					? []
+					: Array.isArray(existingValue)
+						? [...existingValue]
+						: [existingValue];
 
 				// Add new event ID if not already present
 				if (!existingIds.includes(icsEvent.id)) {

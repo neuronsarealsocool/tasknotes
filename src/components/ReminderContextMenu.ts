@@ -3,6 +3,7 @@ import TaskNotesPlugin from "../main";
 import { TaskInfo, Reminder } from "../types";
 import { ReminderModal } from "../modals/ReminderModal";
 import { ContextMenu } from "./ContextMenu";
+import { showCoordinatedMenu } from "./ContextMenuCoordinator";
 
 export class ReminderContextMenu {
 	private plugin: TaskNotesPlugin;
@@ -72,7 +73,7 @@ export class ReminderContextMenu {
 			});
 		}
 
-		menu.show(event);
+		showCoordinatedMenu(menu, event);
 	}
 
 	private addQuickRemindersSection(menu: Menu, anchor: "due" | "scheduled", title: string): void {

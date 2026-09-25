@@ -27,6 +27,7 @@ import {
 import type { HTTPRequestLike, HTTPResponseLike, HTTPServerLike } from "../api/httpTypes";
 import { parseRequestUrl } from "../api/httpTypes";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
+import { Platform } from "obsidian";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Services/HTTPAPIService" });
 export const API_BIND_HOST = "127.0.0.1";
@@ -187,9 +188,9 @@ export class HTTPAPIService implements IWebhookNotifier {
 	private authenticate(req: HTTPRequestLike): boolean {
 		const authToken = this.plugin.settings.apiAuthToken;
 
-		// Skip auth if no token is configured
+		// A missing credential never opens an unauthenticated listener.
 		if (!authToken) {
-			return true;
+			return false;
 		}
 
 		const authHeader = req.headers.authorization;
@@ -290,34 +291,79 @@ export class HTTPAPIService implements IWebhookNotifier {
 		return parseJSONBody(req);
 	}
 
+	private starting: Promise<void> | null = null;
+
 	async start(): Promise<void> {
-		return new Promise((resolve, reject) => {
+		if (this.starting) return this.starting;
+		if (this.isRunning()) return;
+		const starting = this.startServer();
+		this.starting = starting;
+		try {
+			await starting;
+		} finally {
+			this.starting = null;
+		}
+	}
+
+	private async startServer(): Promise<void> {
+		if (!Platform.isDesktop || !Platform.isDesktopApp)
+			throw new Error("The HTTP API is only available in the desktop app.");
+		if (!this.plugin.settings.apiAuthToken) {
+			const token = btoa(
+				String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))
+			)
+				.replace(/\+/g, "-")
+				.replace(/\//g, "_")
+				.replace(/=+$/g, "");
+			this.plugin.settings.apiAuthToken = token;
 			try {
-				// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules -- HTTP API is desktop-only and lazy-loads Node http at server start.
-				const http = require("http") as HttpModuleLike;
-				this.server = http.createServer((req, res) => {
-					this.handleRequest(req, res).catch((error) => {
-						tasknotesLogger.error("Request handling error:", {
-							category: "provider",
-							operation: "request-handling",
-							error: error,
+				await this.plugin.saveSettings();
+			} catch (error) {
+				// A retry must persist a credential, not reuse an unsaved one.
+				if (this.plugin.settings.apiAuthToken === token) {
+					this.plugin.settings.apiAuthToken = "";
+				}
+				throw error;
+			}
+		}
+		return new Promise((resolve, reject) => {
+			if (!Platform.isDesktop || !Platform.isDesktopApp) {
+				reject(new Error("The HTTP API is only available in the desktop app."));
+				return;
+			}
+
+			try {
+				if (Platform.isDesktop && Platform.isDesktopApp) {
+					// eslint-disable-next-line @typescript-eslint/no-require-imports -- The guarded desktop path lazy-loads Node's HTTP server.
+					const http = require("http") as HttpModuleLike;
+					this.server = http.createServer((req, res) => {
+						this.handleRequest(req, res).catch((error) => {
+							tasknotesLogger.error("Request handling error:", {
+								category: "provider",
+								operation: "request-handling",
+								error: error,
+							});
+							this.sendResponse(
+								res,
+								500,
+								this.errorResponse("Internal server error")
+							);
 						});
-						this.sendResponse(res, 500, this.errorResponse("Internal server error"));
 					});
-				});
 
-				this.server.listen(this.plugin.settings.apiPort, API_BIND_HOST, () => {
-					resolve();
-				});
-
-				this.server.on("error", (err) => {
-					tasknotesLogger.error("API server error:", {
-						category: "provider",
-						operation: "api-server",
-						error: err,
+					this.server.listen(this.plugin.settings.apiPort, API_BIND_HOST, () => {
+						resolve();
 					});
-					reject(err);
-				});
+
+					this.server.on("error", (err) => {
+						tasknotesLogger.error("API server error:", {
+							category: "provider",
+							operation: "api-server",
+							error: err,
+						});
+						reject(err);
+					});
+				}
 			} catch (error) {
 				reject(error instanceof Error ? error : new Error(String(error)));
 			}

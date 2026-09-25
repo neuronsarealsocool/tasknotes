@@ -22,18 +22,53 @@ Default port is `8080`.
 
 ## Authentication
 
-Authentication is optional.
+Authentication is required for both HTTP API and MCP requests.
 
-- If `apiAuthToken` is empty, all API requests are accepted.
-- If `apiAuthToken` is set, send `Authorization: Bearer <token>`.
-- Set a token for any workflow where local browser pages, scripts, or other
-  desktop apps are not fully trusted.
+- Send `Authorization: Bearer <token>` using the token in Integrations settings.
+- If `apiAuthToken` is empty at startup, TaskNotes generates and saves a token before starting the server.
+- Clearing the token does not enable unauthenticated access; requests are rejected until a token is configured or generated at the next server start.
+- Existing clients that omitted authentication must be updated to send the token.
 
 Example:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/api/health
 ```
+
+## Connecting Claude Desktop with MCP
+
+TaskNotes 4.13.0 and later require a **TaskNotes API token**, not a Claude/Anthropic API key. The local MCP endpoint uses bearer authentication, not OAuth registration.
+
+1. In **Settings → TaskNotes → Integrations**, enable **HTTP API** and **MCP server**.
+2. To generate a TaskNotes token, leave **API authentication token** empty and restart Obsidian. An existing TaskNotes token can be reused; do not clear it unless you intend to replace it for all clients.
+3. Reopen Integrations and copy the generated token. Keep it private.
+4. In Claude Desktop, open **Settings → Developer → Edit Config** and add the following entry, preserving any other MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "Tasknotes": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:8080/mcp",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer YOUR_TASKNOTES_API_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Replace `YOUR_TASKNOTES_API_TOKEN` with the token from TaskNotes, keeping the `Bearer ` prefix. Change `8080` if you configured a different port. This configuration requires Node.js/npm so Claude can run `npx`.
+
+5. Fully quit and reopen Claude Desktop. Keep Obsidian running while using the tools.
+
+If Claude reports **Server Disconnected**, or `mcp-remote` fails in `registerClient`/OAuth registration, first check that the bearer header contains the current TaskNotes token. A missing or rejected token can cause the client to attempt OAuth registration, which this endpoint does not provide. After changing the token in TaskNotes, update every client and restart Claude. Do not disable authentication as a workaround.
 
 ## Response Format
 
@@ -210,6 +245,8 @@ curl "http://localhost:8080/api/tasks/TaskNotes%2FTasks%2FReview%20docs.md"
 Update task with partial payload.
 
 Configured TaskNotes user fields can be updated either by their frontmatter property key or via `customProperties`.
+
+Sending an empty array for `contexts` or `blockedBy` clears the corresponding frontmatter field.
 
 ```bash
 curl -X PUT "http://localhost:8080/api/tasks/TaskNotes%2FTasks%2FReview%20docs.md" \

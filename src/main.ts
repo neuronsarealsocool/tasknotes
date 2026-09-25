@@ -61,6 +61,8 @@ import { AutoExportService } from "./services/AutoExportService";
 import type { HTTPAPIService } from "./services/HTTPAPIService";
 import { createI18nService, I18nService } from "./i18n";
 import { OAuthService } from "./services/OAuthService";
+import { OAuthSecretStore } from "./services/OAuthSecretStore";
+import { migrateLegacyOAuthData, stripLegacyOAuthData } from "./services/oauthSecretMigration";
 import { GoogleCalendarService } from "./services/GoogleCalendarService";
 import { MicrosoftCalendarService } from "./services/MicrosoftCalendarService";
 import { CalendarProviderRegistry } from "./services/CalendarProvider";
@@ -99,6 +101,7 @@ import {
 } from "./settings/settingsPersistence";
 import { startDateChangeDetection } from "./bootstrap/dateChangeDetection";
 import { createTaskNotesLogger } from "./utils/tasknotesLogger";
+import { sanitizeLinkAliasText } from "./utils/linkAliasUtils";
 import { TASKNOTES_RUNTIME_LIFECYCLE_RAW_EVENTS } from "./api/runtime-api";
 import type { WorkspaceNavigationOptions } from "./ui/WorkspaceNavigationService";
 import {
@@ -198,8 +201,10 @@ export default class TaskNotesPlugin extends Plugin {
 	// Public JavaScript API for in-vault scripts
 	api: import("./api/TaskNotesAPI").TaskNotesPublicAPI;
 
-	// OAuth service
+	// OAuth services
 	oauthService: OAuthService;
+	oauthSecretStore: OAuthSecretStore;
+	private oauthSecretStorageReady = false;
 
 	// Google Calendar service
 	googleCalendarService: GoogleCalendarService;
@@ -235,6 +240,7 @@ export default class TaskNotesPlugin extends Plugin {
 
 	// Bases registration state management
 	basesRegistered = false;
+	basesRegistrationRetryIntervalId: number | null = null;
 
 	/**
 	 * Get the system UI locale with proper priority order for TaskNotes plugin.
@@ -310,7 +316,9 @@ export default class TaskNotesPlugin extends Plugin {
 		this.migrationPromise = this.performEarlyMigrationCheck();
 
 		initializeCalendarProviders(this);
-		await registerBasesIntegration(this);
+		// Not awaited: if Bases has not loaded yet this schedules a retry timer,
+		// and initializeAfterLayoutReady attempts registration again.
+		void registerBasesIntegration(this);
 
 		// Defer expensive initialization until layout is ready
 		this.app.workspace.onLayoutReady(() => {
@@ -581,7 +589,7 @@ export default class TaskNotesPlugin extends Plugin {
 	}
 
 	private createReleaseAvailableNotice(version: string): DocumentFragment {
-		const fragment = activeDocument.createDocumentFragment();
+		const fragment = activeWindow.createFragment();
 		fragment.appendText(
 			this.i18n.translate("notices.releaseAvailable.message", {
 				version,
@@ -589,7 +597,7 @@ export default class TaskNotesPlugin extends Plugin {
 		);
 		fragment.appendText(" ");
 
-		const link = activeDocument.createElement("a");
+		const link = activeWindow.createEl("a");
 		link.textContent = this.i18n.translate("notices.releaseAvailable.action");
 		link.href = TASKNOTES_COMMUNITY_PLUGIN_URL;
 		link.addEventListener("click", (event) => {
@@ -677,6 +685,51 @@ export default class TaskNotesPlugin extends Plugin {
 		return pluginDataFileExists(this);
 	}
 
+	async loadPluginDataForSafeWrite(
+		operation: string
+	): Promise<Record<string, unknown> | null> {
+		const loadedData = (await this.loadData()) as Record<string, unknown> | null | undefined;
+		if (
+			(loadedData === null || loadedData === undefined) &&
+			(await this.pluginDataFileExists())
+		) {
+			this.settingsLoadCompromised = true;
+			tasknotesLogger.warn(
+				"[TaskNotes] Skipping plugin data save because data.json exists but could not be read.",
+				{
+					category: "configuration",
+					operation: "load-plugin-data-for-safe-write",
+					details: {
+						requestedOperation: operation,
+						settingsSavesBlocked: true,
+					},
+				}
+			);
+			return null;
+		}
+
+		if (loadedData === null || loadedData === undefined) {
+			return {};
+		}
+
+		if (typeof loadedData === "object" && !Array.isArray(loadedData)) {
+			return loadedData;
+		}
+
+		tasknotesLogger.warn(
+			"[TaskNotes] Skipping plugin data save because loaded plugin data was not an object.",
+			{
+				category: "configuration",
+				operation: "load-plugin-data-for-safe-write",
+				details: {
+					requestedOperation: operation,
+					dataType: Array.isArray(loadedData) ? "array" : typeof loadedData,
+				},
+			}
+		);
+		return null;
+	}
+
 	private async loadSettingsData(): Promise<LoadedSettingsData | null> {
 		this.settingsLoadCompromised = false;
 
@@ -692,11 +745,27 @@ export default class TaskNotesPlugin extends Plugin {
 				},
 			});
 		}
+		if (result.compromised)
+			throw new Error(
+				"TaskNotes settings are unreadable; restore settings before loading the plugin."
+			);
 		return result.data;
 	}
 
 	async loadSettings() {
-		const loadedData = await this.loadSettingsData();
+		let loadedData = await this.loadSettingsData();
+		this.oauthSecretStore ??= new OAuthSecretStore(this.app.secretStorage);
+		this.oauthSecretStorageReady = false;
+
+		if (!this.settingsLoadCompromised) {
+			const migration = migrateLegacyOAuthData(loadedData, this.oauthSecretStore);
+			if (migration.changed && migration.data) {
+				await super.saveData(migration.data);
+			}
+			loadedData = migration.data;
+			this.oauthSecretStorageReady = true;
+		}
+
 		const { settings, shouldPersistMigratedSettings } = buildSettingsFromLoadedData(loadedData);
 		this.settings = settings;
 		this.shouldCreateStarterNoteOnStartup = !settings.lastSeenVersion;
@@ -719,6 +788,17 @@ export default class TaskNotesPlugin extends Plugin {
 		}
 
 		// Cache setting migration is no longer needed (native cache only)
+	}
+
+	async saveData(data: unknown): Promise<void> {
+		const sanitizedData =
+			this.oauthSecretStorageReady &&
+			typeof data === "object" &&
+			data !== null &&
+			!Array.isArray(data)
+				? stripLegacyOAuthData(data as Record<string, unknown>)
+				: data;
+		await super.saveData(sanitizedData);
 	}
 
 	async saveSettings() {
@@ -764,21 +844,11 @@ export default class TaskNotesPlugin extends Plugin {
 			return;
 		}
 
-		// Load existing plugin data to preserve non-settings data like pomodoroHistory
-		const loadedData = await this.loadData();
-		if (loadedData === null && (await this.pluginDataFileExists())) {
-			this.settingsLoadCompromised = true;
-			tasknotesLogger.warn(
-				"[TaskNotes] Skipping settings save because data.json exists but could not be read.",
-				{
-					category: "configuration",
-					operation: "skipping-settings-save-because-data-json-exists-but-read",
-				}
-			);
+		const data = await this.loadPluginDataForSafeWrite("save-settings-data-only");
+		if (!data) {
 			return;
 		}
 
-		const data = loadedData || {};
 		await this.saveData(buildSettingsDataForSave(data, this.settings));
 	}
 
@@ -1068,47 +1138,62 @@ export default class TaskNotesPlugin extends Plugin {
 	}
 
 	/**
-	 * Inject dynamic CSS for custom statuses and priorities
+	 * Apply dynamic CSS variables for custom statuses and priorities.
 	 */
 	injectCustomStyles(): void {
-		// Remove existing custom styles
-		const existingStyle = activeDocument.getElementById("tasknotes-custom-styles");
-		if (existingStyle) {
-			existingStyle.remove();
+		// Remove the style element used by TaskNotes 4.12.0 and earlier.
+		activeDocument.getElementById("tasknotes-custom-styles")?.remove();
+
+		const rootStyle = activeDocument.documentElement.style;
+		for (let index = rootStyle.length - 1; index >= 0; index -= 1) {
+			const propertyName = rootStyle.item(index);
+			if (propertyName.startsWith("--status-") || propertyName.startsWith("--priority-")) {
+				rootStyle.removeProperty(propertyName);
+			}
 		}
 
-		// Generate new styles
-		const statusStyles = this.statusManager.getStatusStyles();
-		const priorityStyles = this.priorityManager.getPriorityStyles();
-
-		// Create style element
-		const styleEl = activeDocument.createElement("style");
-		styleEl.id = "tasknotes-custom-styles";
-		styleEl.textContent = `
-		${statusStyles}
-		${priorityStyles}
-	`;
-
-		// Inject into document head
-		activeDocument.head.appendChild(styleEl);
+		for (const [propertyName, value] of [
+			...this.statusManager.getStatusColorVariables(),
+			...this.priorityManager.getPriorityColorVariables(),
+		]) {
+			rootStyle.setProperty(propertyName, value);
+		}
 	}
 
 	async updateTaskProperty(
 		task: TaskInfo,
 		property: keyof TaskInfo,
 		value: TaskInfo[keyof TaskInfo],
-		options: { silent?: boolean } = {}
+		options: {
+			silent?: boolean;
+			completionDate?: string;
+			confirmClearInstances?: (cleared: {
+				complete: string[];
+				skipped: string[];
+			}) => Promise<boolean>;
+		} = {}
 	): Promise<TaskInfo> {
 		try {
-			const updatedTask = await this.taskService.updateProperty(
-				task,
-				property,
-				value,
-				options
-			);
+			// A declined clear-confirmation aborts the reschedule, so the success notice is suppressed below.
+			let cancelledByUser = false;
+			const confirmClearInstances =
+				options.confirmClearInstances ??
+				(options.silent
+					? undefined
+					: async (cleared: { complete: string[]; skipped: string[] }) => {
+							const proceed = await this.confirmClearRescheduledInstances(cleared);
+							if (!proceed) {
+								cancelledByUser = true;
+							}
+							return proceed;
+						});
 
-			// Provide user feedback unless silent
-			if (!options.silent) {
+			const updatedTask = await this.taskService.updateProperty(task, property, value, {
+				...options,
+				confirmClearInstances,
+			});
+
+			if (!options.silent && !cancelledByUser) {
 				if (property === "status") {
 					const statusValue = typeof value === "string" ? value : String(value);
 					const statusConfig = this.statusManager.getStatusConfig(statusValue);
@@ -1131,15 +1216,41 @@ export default class TaskNotesPlugin extends Plugin {
 	}
 
 	/**
+	 * Ask the user to confirm clearing recorded completed/skipped instances that a
+	 * reschedule would remove (those on or after the new scheduled date).
+	 */
+	private async confirmClearRescheduledInstances(cleared: {
+		complete: string[];
+		skipped: string[];
+	}): Promise<boolean> {
+		const { showConfirmationModal } = await import("./modals/ConfirmationModal");
+		const dates = Array.from(new Set([...cleared.complete, ...cleared.skipped])).sort();
+		return showConfirmationModal(this.app, {
+			title: this.i18n.translate("contextMenus.task.completion.clearInstancesConfirmTitle"),
+			message: this.i18n.translate(
+				"contextMenus.task.completion.clearInstancesConfirmMessage",
+				{ dates: dates.join(", ") }
+			),
+			confirmText: this.i18n.translate(
+				"contextMenus.task.completion.clearInstancesConfirmButton"
+			),
+		});
+	}
+
+	/**
 	 * Toggles a recurring task's completion status for the selected date
 	 */
 	async toggleRecurringTaskComplete(task: TaskInfo, date?: Date): Promise<TaskInfo> {
 		try {
 			const targetDate = await this.taskService.resolveRecurringTaskActionDate(task, date);
-			const updatedTask = await this.taskService.toggleRecurringTaskComplete(
+			const result = await this.taskService.toggleRecurringTaskCompleteWithOccurrenceNotes(
 				task,
 				targetDate
 			);
+			// Task cards still represent the recurring parent, not the occurrence note.
+			const updatedTask = result.path === task.path
+				? result
+				: (await this.cacheManager.getTaskInfo(task.path)) || task;
 
 			const dateStr = formatDateForStorage(targetDate);
 			const wasCompleted = updatedTask.complete_instances?.includes(dateStr);
@@ -1252,6 +1363,7 @@ export default class TaskNotesPlugin extends Plugin {
 			content,
 			frontmatter,
 			settings: this.settings,
+			fieldMapper: this.fieldMapper,
 		});
 
 		// Open the task edit modal with the constructed TaskInfo
@@ -1283,30 +1395,6 @@ export default class TaskNotesPlugin extends Plugin {
 
 	async rolloverOverdueScheduledTasks(): Promise<void> {
 		await this.taskActionCoordinator.rolloverOverdueScheduledTasks();
-	}
-
-	/**
-	 * Apply a filter to show subtasks of a project
-	 */
-	async applyProjectSubtaskFilter(projectTask: TaskInfo): Promise<void> {
-		try {
-			const file = this.app.vault.getAbstractFileByPath(projectTask.path);
-			if (!file) {
-				new Notice("Project file not found");
-				return;
-			}
-
-			// Note: This feature was part of the old view system (deprecated in v4)
-			// TODO: Re-implement for Bases views if needed
-			new Notice("Project subtask filtering not available");
-		} catch (error) {
-			tasknotesLogger.error("Error applying project subtask filter:", {
-				category: "persistence",
-				operation: "applying-project-subtask-filter",
-				error: error,
-			});
-			new Notice("Failed to apply project filter");
-		}
 	}
 
 	/**
@@ -1384,7 +1472,10 @@ export default class TaskNotesPlugin extends Plugin {
 					void (async () => {
 						const value =
 							date && time ? combineDateAndTime(date, time) : date || undefined;
-						await this.taskService.updateProperty(task, field, value);
+						await this.taskService.updateProperty(task, field, value, {
+							confirmClearInstances: (cleared) =>
+								this.confirmClearRescheduledInstances(cleared),
+						});
 					})();
 				},
 			});
@@ -1671,6 +1762,40 @@ export default class TaskNotesPlugin extends Plugin {
 		}
 
 		await this.openTaskEditModalForFile(activeFile, "Current file is not a tasknote");
+	}
+
+	private currentTaskTimeTrackingPending = false;
+
+	async setCurrentTaskTimeTracking(action: "start" | "stop"): Promise<void> {
+		if (this.currentTaskTimeTrackingPending) {
+			return;
+		}
+		this.currentTaskTimeTrackingPending = true;
+		try {
+			const task = await this.getCurrentTaskForCommand();
+			if (!task) {
+				return;
+			}
+
+			try {
+				if (action === "start") {
+					await this.startTimeTracking(task);
+				} else {
+					await this.stopTimeTracking(task);
+				}
+			} catch {
+				// The coordinator already logs the failure and shows a specific notice.
+			}
+		} catch (error) {
+			tasknotesLogger.error("Failed to resolve current task for time tracking:", {
+				category: "persistence",
+				operation: "current-task-time-tracking",
+				error,
+			});
+			new Notice("Failed to load current task");
+		} finally {
+			this.currentTaskTimeTrackingPending = false;
+		}
 	}
 
 	async cycleCurrentTaskStatus(): Promise<void> {
@@ -1995,7 +2120,7 @@ export default class TaskNotesPlugin extends Plugin {
 				file,
 				sourcePath,
 				"",
-				task.title // Use task title as alias
+				sanitizeLinkAliasText(task.title)
 			);
 
 			// Insert the link at the determined insertion point

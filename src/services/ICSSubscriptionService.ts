@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- ICS parsing normalizes optional event fields before use. */
 import { requestUrl, TFile } from "obsidian";
 import ICAL from "ical.js";
+import { getICSCalendarOwnerEmail, getICSOwnerDeclined } from "../utils/icsAttendeeFiltering";
 import { ICSSubscription, ICSEvent, ICSCache } from "../types";
 import { EventEmitter } from "../utils/EventEmitter";
 import TaskNotesPlugin from "../main";
 import type { InterpolationValues, TranslationKey } from "../i18n";
-import { stringifyUnknown } from "../utils/stringUtils";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 import { publishUserNotice } from "../core/userNotices";
 import { resolveTzidToIANA, wallTimeInZoneToUtcIso } from "../utils/icsTimezoneFallback";
@@ -15,6 +15,8 @@ const tasknotesLogger = createTaskNotesLogger({ tag: "Services/ICSSubscriptionSe
 const ICS_RECURRENCE_EXPANSION_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
 const MAX_RECURRING_ICS_VISIBLE_INSTANCES = 3000;
 const MAX_RECURRING_ICS_ITERATIONS = 10000;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type VaultAdapterWithBasePath = {
 	getBasePath?: () => string;
@@ -75,6 +77,43 @@ function registerCalendarVTimezones(calendar: ICAL.Component): void {
 	});
 }
 
+function dateOnlyToUtcMs(dateString: string): number | null {
+	if (!DATE_ONLY_PATTERN.test(dateString)) {
+		return null;
+	}
+
+	const [year, month, day] = dateString.split("-").map(Number);
+	return Date.UTC(year, month - 1, day);
+}
+
+function formatUtcDateOnly(date: Date): string {
+	const year = date.getUTCFullYear().toString().padStart(4, "0");
+	const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
+	const day = date.getUTCDate().toString().padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+function getDateOnlyDurationDays(startDate: string, endDate: string): number | null {
+	const startMs = dateOnlyToUtcMs(startDate);
+	const endMs = dateOnlyToUtcMs(endDate);
+
+	if (startMs === null || endMs === null || endMs <= startMs) {
+		return null;
+	}
+
+	return Math.round((endMs - startMs) / MS_PER_DAY);
+}
+
+function addDaysToDateOnly(dateString: string, days: number): string {
+	const dateMs = dateOnlyToUtcMs(dateString);
+
+	if (dateMs === null) {
+		return dateString;
+	}
+
+	return formatUtcDateOnly(new Date(dateMs + days * MS_PER_DAY));
+}
+
 export class ICSSubscriptionService extends EventEmitter {
 	private plugin: TaskNotesPlugin;
 	private subscriptions: ICSSubscription[] = [];
@@ -105,12 +144,15 @@ export class ICSSubscriptionService extends EventEmitter {
 	 * the caller can pass the raw TZID parameter from the source property; if
 	 * it maps to a known IANA zone (directly or via the Windows TZID alias
 	 * table), Intl.DateTimeFormat is used to compute the correct UTC instant.
+	 * Timed values with no TZID are floating wall times, so they are resolved
+	 * against the user's local runtime timezone before storing as UTC.
 	 *
 	 * This fixes issues with:
 	 * - Outlook/Exchange feeds that reference Windows TZIDs without
 	 *   inlining a VTIMEZONE block for every referenced zone.
 	 * - Events with IANA TZIDs that have no accompanying VTIMEZONE.
 	 * - Non-IANA timezones (e.g., TZID=Zurich without VTIMEZONE).
+	 * - Floating timed events with no TZID.
 	 * - All-day events (date-only output, no zone math).
 	 */
 	private icalTimeToISOString(icalTime: ICAL.Time, rawTzid?: string | null): string {
@@ -133,6 +175,14 @@ export class ICSSubscriptionService extends EventEmitter {
 			if (iana) {
 				return wallTimeInZoneToUtcIso(icalTime, iana);
 			}
+
+			const hasExplicitTzid = typeof rawTzid === "string" && rawTzid.trim().length > 0;
+			if (!hasExplicitTzid) {
+				const localTimeZone = this.getLocalTimeZoneForFloatingTime();
+				if (localTimeZone) {
+					return wallTimeInZoneToUtcIso(icalTime, localTimeZone);
+				}
+			}
 		}
 
 		// Normal path: ical.js has a registered timezone for this Time
@@ -142,16 +192,43 @@ export class ICSSubscriptionService extends EventEmitter {
 		return new Date(unixTime * 1000).toISOString();
 	}
 
+	private getLocalTimeZoneForFloatingTime(): string | null {
+		try {
+			return resolveTzidToIANA(Intl.DateTimeFormat().resolvedOptions().timeZone);
+		} catch {
+			return null;
+		}
+	}
+
 	/**
 	 * Extract the raw TZID parameter from a property (e.g. DTSTART, DTEND).
 	 * Returns null when the property is missing or has no TZID parameter
-	 * (which means the value is either UTC, date-only, or floating by intent).
+	 * (which means the value is either UTC, date-only, or a floating wall time).
 	 */
 	private rawTzidOf(vevent: ICAL.Component, propName: string): string | null {
 		const prop = vevent.getFirstProperty(propName);
 		if (!prop) return null;
 		const tzid = prop.getParameter("tzid");
 		return typeof tzid === "string" ? tzid : null;
+	}
+
+	private getRecurringInstanceEnd(
+		instanceStart: string,
+		startISO: string,
+		endISO: string | undefined,
+		isAllDay: boolean
+	): string | undefined {
+		if (!endISO) {
+			return undefined;
+		}
+
+		if (isAllDay) {
+			const durationDays = getDateOnlyDurationDays(startISO, endISO);
+			return durationDays === null ? endISO : addDaysToDateOnly(instanceStart, durationDays);
+		}
+
+		const durationMs = new Date(endISO).getTime() - new Date(startISO).getTime();
+		return new Date(new Date(instanceStart).getTime() + durationMs).toISOString();
 	}
 
 	constructor(plugin: TaskNotesPlugin) {
@@ -192,7 +269,9 @@ export class ICSSubscriptionService extends EventEmitter {
 
 	private async loadSubscriptions(): Promise<void> {
 		try {
-			const data = await this.plugin.loadData();
+			const data = (await this.plugin.loadData()) as {
+				icsSubscriptions?: ICSSubscription[];
+			} | null;
 			this.subscriptions = data?.icsSubscriptions || [];
 		} catch (error) {
 			tasknotesLogger.error("Failed to load ICS subscriptions:", {
@@ -206,7 +285,8 @@ export class ICSSubscriptionService extends EventEmitter {
 
 	private async saveSubscriptions(): Promise<void> {
 		try {
-			const data = (await this.plugin.loadData()) || {};
+			const data = await this.plugin.loadPluginDataForSafeWrite("save-ics-subscriptions");
+			if (!data) return;
 			data.icsSubscriptions = this.subscriptions;
 			await this.plugin.saveData(data);
 		} catch (error) {
@@ -427,6 +507,7 @@ export class ICSSubscriptionService extends EventEmitter {
 			// Register VTIMEZONE components before processing events.
 			registerCalendarVTimezones(comp);
 
+			const ownerEmail = getICSCalendarOwnerEmail(comp);
 			const vevents = comp.getAllSubcomponents("vevent");
 			const events: ICSEvent[] = [];
 
@@ -442,11 +523,13 @@ export class ICSSubscriptionService extends EventEmitter {
 
 				// Check if this is a modified instance (has RECURRENCE-ID)
 				const recurrenceId = vevent.getFirstPropertyValue("recurrence-id");
-				if (recurrenceId) {
+				if (recurrenceId instanceof ICAL.Time) {
 					if (!modifiedInstances.has(uid)) {
 						modifiedInstances.set(uid, new Map());
 					}
-					const recurrenceIdStr = stringifyUnknown(recurrenceId);
+					// Use the same ICAL.Time representation as iterator occurrences,
+					// not JSON serialization of the time's internal fields.
+					const recurrenceIdStr = recurrenceId.toString();
 					modifiedInstances.get(uid)!.set(recurrenceIdStr, event);
 				}
 			});
@@ -468,23 +551,11 @@ export class ICSSubscriptionService extends EventEmitter {
 						return;
 					}
 
-					// Skip events the user has declined.
-					// In a personal calendar's ICS feed the owner's ATTENDEE
-					// entry carries their own PARTSTAT, so if any attendee is
-					// marked DECLINED the event was almost certainly declined
-					// by the calendar owner.
-					const attendees = vevent.getAllProperties("attendee");
-					if (attendees && attendees.length > 0) {
-						const hasDeclined = attendees.some((a) => {
-							const partstat = a.getParameter("partstat");
-							return (
-								typeof partstat === "string" &&
-								partstat.toUpperCase() === "DECLINED"
-							);
-						});
-						if (hasDeclined) {
-							return;
-						}
+					// Another guest declining is not evidence that the owner declined.
+					// Keep events visible when the feed does not identify the owner.
+					const ownerDeclined = getICSOwnerDeclined(vevent, ownerEmail) ?? false;
+					if (ownerDeclined && !event.isRecurring()) {
+						return;
 					}
 
 					// Extract basic properties
@@ -586,6 +657,13 @@ export class ICSSubscriptionService extends EventEmitter {
 							// Check if this instance has been modified
 							const modifiedEvent = modifiedForThisEvent.get(occurrenceStr);
 							if (modifiedEvent) {
+								const modifiedStatus = modifiedEvent.component.getFirstPropertyValue("status");
+								if (typeof modifiedStatus === "string" && modifiedStatus.toUpperCase() === "CANCELLED") {
+									continue;
+								}
+								if (getICSOwnerDeclined(modifiedEvent.component, ownerEmail) ?? ownerDeclined) {
+									continue;
+								}
 								// Use the modified event instead
 								const modifiedStart = modifiedEvent.startDate;
 								const modifiedEnd = modifiedEvent.endDate;
@@ -622,6 +700,7 @@ export class ICSSubscriptionService extends EventEmitter {
 									visibleInstanceCount++;
 								}
 							} else {
+								if (ownerDeclined) continue;
 								// Use the original recurring event instance.
 								// The iterator emits ICAL.Time values that share the
 								// startDate's TZID, so pass startTzidRaw for fallback.
@@ -629,19 +708,15 @@ export class ICSSubscriptionService extends EventEmitter {
 									occurrence,
 									startTzidRaw
 								);
-								let instanceEnd = endISO;
-
-								if (endISO && startISO && !isAllDay) {
-									// Derive duration from the already-resolved ISO
-									// strings so the fallback path stays consistent
-									// across the start and end of an instance.
-									const durationMs =
-										new Date(endISO).getTime() -
-										new Date(startISO).getTime();
-									instanceEnd = new Date(
-										new Date(instanceStart).getTime() + durationMs
-									).toISOString();
-								}
+								// Derive duration from the already-resolved ISO
+								// strings so the fallback path stays consistent
+								// across the start and end of an instance.
+								const instanceEnd = this.getRecurringInstanceEnd(
+									instanceStart,
+									startISO,
+									endISO,
+									isAllDay
+								);
 
 								events.push({
 									...icsEvent,
@@ -986,3 +1061,5 @@ export class ICSSubscriptionService extends EventEmitter {
 			.sort((a, b) => a.path.localeCompare(b.path));
 	}
 }
+
+/* eslint-enable @typescript-eslint/no-non-null-assertion -- Re-enable after the subscription service implementation. */

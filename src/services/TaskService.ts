@@ -14,7 +14,9 @@ import {
 	buildMaterializedOccurrenceUnskipPlan,
 	findMaterializedOccurrence,
 	isMaterializedOccurrenceTask,
+	taskInfoToSpecFields,
 	taskInfoUpdatesToFrontmatterPatch,
+	type MaterializedOccurrenceStatusPlan,
 } from "@tasknotes/model/operations";
 import { AutoArchiveService } from "./AutoArchiveService";
 import { TFile, normalizePath } from "obsidian";
@@ -26,13 +28,15 @@ import {
 	resetMarkdownCheckboxes,
 } from "../utils/helpers";
 import { formatDependencyLink, resolveDependencyEntry } from "../utils/dependencyUtils";
-import { generateLink, getProjectDisplayName, parseLinkToPath } from "../utils/linkUtils";
+import { getProjectDisplayName, parseLinkToPath } from "../utils/linkUtils";
 import {
 	formatDateForStorage,
 	getCurrentDateString,
 	getCurrentTimestamp,
+	getDatePart,
 } from "../utils/dateUtils";
-import { processFolderTemplate, TaskTemplateData } from "../utils/folderTemplateProcessor";
+import { getNextUncompletedOccurrence, updateToNextScheduledOccurrence } from "../core/recurrence";
+import { processFolderTemplate, TaskTemplateData, FolderTemplateOptions } from "../utils/folderTemplateProcessor";
 
 import TaskNotesPlugin from "../main";
 import type { InterpolationValues, TranslationKey } from "../i18n";
@@ -80,6 +84,7 @@ import {
 	computeBlockedByUpdate,
 } from "./task-service/taskBlockingRelationships";
 import { resolveTaskPropertyFrontmatterField } from "./task-service/taskPropertyFrontmatterField";
+import { processVaultFile, processVaultFrontMatter } from "./VaultMutationService";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Services/TaskService" });
@@ -95,6 +100,7 @@ export class TaskService {
 	private autoArchiveService?: AutoArchiveService;
 	private readonly taskCreationService: TaskCreationService;
 	private readonly taskUpdateService: TaskUpdateService;
+	private readonly occurrenceMaterializations = new Map<string, Promise<TaskInfo>>();
 
 	constructor(private plugin: TaskNotesPlugin) {
 		this.taskCreationService = new TaskCreationService({
@@ -103,8 +109,16 @@ export class TaskService {
 			applyTaskCreationDefaults: (taskData) =>
 				Promise.resolve(applyTaskCreationDefaultsToData(taskData, this.plugin.settings)),
 			applyTemplate: (taskData) => this.applyTemplate(taskData),
-			processFolderTemplate: (folderTemplate, taskData, date) =>
-				this.processFolderTemplate(folderTemplate, taskData, date),
+			processFolderTemplate: (folderTemplate, taskData, date) => {
+				if (!/\{\{currentNote(?:Path|Title)\}\}/.test(folderTemplate)) {
+					return this.processFolderTemplate(folderTemplate, taskData, date);
+				}
+				const currentFile = this.plugin.app.workspace.getActiveFile();
+				return this.processFolderTemplate(folderTemplate, taskData, date, {
+					path: currentFile?.parent?.path || "",
+					title: currentFile?.basename || "",
+				});
+			},
 			sanitizeTitleForFilename: sanitizeTaskTitleForFilename,
 			sanitizeTitleForStorage: sanitizeTaskTitleForStorage,
 		});
@@ -204,7 +218,10 @@ export class TaskService {
 	}
 
 	private getCompletionDateForTask(task: TaskInfo): string {
-		return task.occurrence_date || getCurrentDateString();
+		// Record the real completion date, matching non-recurring task behavior.
+		// Which occurrence was fulfilled is tracked separately on the parent's
+		// complete_instances (see buildMaterializedOccurrenceCompletePlan). #2125
+		return getCurrentDateString();
 	}
 
 	/**
@@ -244,7 +261,8 @@ export class TaskService {
 	private processFolderTemplate(
 		folderTemplate: string,
 		taskData?: TaskCreationData,
-		date: Date = new Date()
+		date: Date = new Date(),
+		currentNote?: FolderTemplateOptions["currentNote"]
 	): string {
 		// Convert TaskCreationData to TaskTemplateData
 		const templateData: TaskTemplateData | undefined = taskData
@@ -263,6 +281,7 @@ export class TaskService {
 		return processFolderTemplate(folderTemplate, {
 			date,
 			taskData: templateData,
+			currentNote,
 			extractProjectBasename: (project) => this.extractProjectBasename(project),
 			extractProjectFilePath: (project) => this.extractProjectFilePath(project),
 		});
@@ -280,7 +299,9 @@ export class TaskService {
 		taskData: TaskCreationData,
 		options: { applyDefaults?: boolean; applyTemplate?: boolean } = {}
 	): Promise<{ file: TFile; taskInfo: TaskInfo }> {
-		return this.taskCreationService.createTask(taskData, options);
+		const result = await this.taskCreationService.createTask(taskData, options);
+		await this.seedInitialOccurrence(result.taskInfo);
+		return result;
 	}
 
 	/**
@@ -566,7 +587,14 @@ export class TaskService {
 		task: TaskInfo,
 		property: keyof TaskInfo,
 		value: unknown,
-		options: { silent?: boolean } = {}
+		options: {
+			silent?: boolean;
+			completionDate?: string;
+			confirmClearInstances?: (cleared: {
+				complete: string[];
+				skipped: string[];
+			}) => Promise<boolean>;
+		} = {}
 	): Promise<TaskInfo> {
 		try {
 			const file = this.plugin.app.vault.getAbstractFileByPath(task.path);
@@ -577,13 +605,18 @@ export class TaskService {
 			// Get fresh task data to prevent overwrites
 			const freshTask = (await this.plugin.cacheManager.getTaskInfo(task.path)) || task;
 
+			// Only affects non-recurring status completions (the frontmatter write is
+			// guarded by `property === "status" && !recurring`).
+			const completionDateString =
+				options.completionDate ?? this.getCompletionDateForTask(freshTask);
+
 			// Step 1: Construct new state in memory using fresh data
 			const updatePlan = buildTaskPropertyUpdatePlan({
 				freshTask,
 				property,
 				value,
 				currentTimestamp: getCurrentTimestamp(),
-				currentDateString: this.getCompletionDateForTask(freshTask),
+				currentDateString: completionDateString,
 				normalizeStatusValue: (candidate) => this.normalizeStatusValue(candidate),
 				isCompletedStatus: (status) => this.plugin.statusManager.isCompletedStatus(status),
 			});
@@ -599,8 +632,50 @@ export class TaskService {
 				applyGoogleCalendarRecurringExceptionCleanup(updatePlan.updatedTask);
 			}
 
+			// Reschedule reactivates the timeline: drop instances on/after the new date
+			// (kept as YYYY-MM-DD, so a lexicographic compare is chronological).
+			let rescheduleClearedOccurrence = false;
+			if (
+				property === "scheduled" &&
+				freshTask.recurrence &&
+				typeof freshTask.scheduled === "string" &&
+				typeof updatePlan.normalizedValue === "string" &&
+				updatePlan.normalizedValue.length > 0
+			) {
+				const previousScheduledDateStr = getDatePart(freshTask.scheduled);
+				const scheduledDateStr = getDatePart(updatePlan.normalizedValue);
+				const scheduledDateChanged = previousScheduledDateStr !== scheduledDateStr;
+				const completeInstances = freshTask.complete_instances ?? [];
+				const skippedInstances = freshTask.skipped_instances ?? [];
+				const removedComplete = completeInstances.filter((d) => d >= scheduledDateStr);
+				const removedSkipped = skippedInstances.filter((d) => d >= scheduledDateStr);
+				if (
+					scheduledDateChanged &&
+					(removedComplete.length > 0 || removedSkipped.length > 0)
+				) {
+					// Give the caller a chance to confirm the destructive clear before
+					// anything is written; a false result aborts the whole reschedule.
+					if (options.confirmClearInstances) {
+						const proceed = await options.confirmClearInstances({
+							complete: removedComplete,
+							skipped: removedSkipped,
+						});
+						if (!proceed) {
+							return freshTask;
+						}
+					}
+					rescheduleClearedOccurrence = true;
+					updatePlan.updatedTask.complete_instances = completeInstances.filter(
+						(d) => d < scheduledDateStr
+					);
+					updatePlan.updatedTask.skipped_instances = skippedInstances.filter(
+						(d) => d < scheduledDateStr
+					);
+				}
+			}
+
 			// Step 2: Persist to file
-			await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+			await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 				// Use field mapper to get the correct frontmatter property name
 				const fieldName = resolveTaskPropertyFrontmatterField(
 					this.plugin.fieldMapper,
@@ -621,7 +696,7 @@ export class TaskService {
 					normalizeStatusValue: (candidate) => this.normalizeStatusValue(candidate),
 					isCompletedStatus: (status) =>
 						this.plugin.statusManager.isCompletedStatus(status),
-					currentDateString: this.getCompletionDateForTask(freshTask),
+					currentDateString: completionDateString,
 				});
 
 				this.writeOptionalFrontmatterField(
@@ -634,19 +709,24 @@ export class TaskService {
 					this.plugin.fieldMapper.toUserField("googleCalendarMovedOriginalDates"),
 					updatePlan.updatedTask.googleCalendarMovedOriginalDates
 				);
+
+				if (rescheduleClearedOccurrence) {
+					this.writeOptionalFrontmatterField(
+						frontmatter,
+						this.plugin.fieldMapper.toUserField("completeInstances"),
+						updatePlan.updatedTask.complete_instances
+					);
+					this.writeOptionalFrontmatterField(
+						frontmatter,
+						this.plugin.fieldMapper.toUserField("skippedInstances"),
+						updatePlan.updatedTask.skipped_instances
+					);
+				}
 			});
 
 			// Step 3: Run post-write side effects (cache, events, webhooks, calendar, auto-archive)
 			await this.applyPropertyChangeSideEffects(
 				file,
-				freshTask,
-				updatePlan.updatedTask,
-				property,
-				freshTask[property],
-				updatePlan.normalizedValue
-			);
-
-			await this.reconcileMaterializedOccurrenceStatusChange(
 				freshTask,
 				updatePlan.updatedTask,
 				property,
@@ -678,7 +758,8 @@ export class TaskService {
 	/**
 	 * Run all post-write side effects for a property change WITHOUT performing a
 	 * frontmatter write. This includes: cache update, EVENT_TASK_UPDATED,
-	 * dependent-task UI refresh, webhooks, Google Calendar sync, and auto-archive.
+	 * dependent-task UI refresh, webhooks, Google Calendar sync, auto-archive,
+	 * and materialized occurrence parent reconciliation.
 	 *
 	 * Callers are responsible for having already persisted the change to frontmatter.
 	 */
@@ -709,9 +790,65 @@ export class TaskService {
 				newValue,
 			}
 		);
+
+		await this.seedInitialOccurrence(updatedTask, originalTask);
+
+		// Direct file edits and bulk property writes must reconcile occurrence
+		// parents just like updateProperty, without repeating the occurrence write.
+		await this.reconcileMaterializedOccurrenceStatusChange(
+			originalTask,
+			updatedTask,
+			property,
+			oldValue,
+			newValue
+		);
+	}
+
+	/** Seed only on activation; never backfill history or restart an exhausted series. */
+	private async seedInitialOccurrence(task: TaskInfo, previous?: TaskInfo): Promise<void> {
+		if (
+			!task.recurrence || task.recurrence_parent || task.archived ||
+			task.occurrence_materialization !== "on_completion" ||
+			(previous?.recurrence && previous.occurrence_materialization === "on_completion")
+		) {
+			return;
+		}
+		const next = getNextUncompletedOccurrence(task);
+		if (next) {
+			try {
+				await this.materializeOccurrence(task, next);
+			} catch (error) {
+				// The parent is already saved. Do not report its creation as failed,
+				// which could cause callers to create a second parent on retry.
+				tasknotesLogger.warn("Failed to create first occurrence:", {
+					category: "persistence",
+					operation: "seed-initial-occurrence",
+					error,
+				});
+				publishUserNotice(this.plugin.emitter, "Task saved, but its first occurrence could not be created. Use Create occurrence to retry.");
+			}
+		}
 	}
 
 	async materializeOccurrence(
+		parentTask: TaskInfo,
+		targetDate: string | Date,
+		overrides: Partial<TaskInfo> = {}
+	): Promise<TaskInfo> {
+		const date = typeof targetDate === "string" ? targetDate.slice(0, 10) : formatDateForStorage(targetDate);
+		const key = JSON.stringify([parentTask.path, date]);
+		const pending = this.occurrenceMaterializations.get(key);
+		if (pending) return pending;
+		const operation = this.materializeOccurrenceUnlocked(parentTask, targetDate, overrides);
+		this.occurrenceMaterializations.set(key, operation);
+		try {
+			return await operation;
+		} finally {
+			this.occurrenceMaterializations.delete(key);
+		}
+	}
+
+	private async materializeOccurrenceUnlocked(
 		parentTask: TaskInfo,
 		targetDate: string | Date,
 		overrides: Partial<TaskInfo> = {}
@@ -755,12 +892,43 @@ export class TaskService {
 			...(plan.occurrenceTask as Partial<TaskInfo>),
 			creationContext: "api",
 			customFrontmatter: occurrenceTemplate.customFrontmatter,
+			occurrenceFilenameTemplate: this.resolveOccurrenceFilenameTemplate(freshParent),
 		};
 		const { taskInfo } = await this.createTask(taskData, {
 			applyDefaults: false,
 			applyTemplate: !occurrenceTemplate.configured,
 		});
 		return taskInfo;
+	}
+
+	/**
+	 * Resolves the filename template for a materialized occurrence (#2126):
+	 * the parent's frontmatter override property wins over the global setting.
+	 * Returns undefined when no non-empty template applies (legacy naming).
+	 */
+	private resolveOccurrenceFilenameTemplate(parentTask: TaskInfo): string | undefined {
+		try {
+			const propertyName =
+				this.plugin.settings.occurrenceFilenameTemplateProperty?.trim() ||
+				"occurrenceFilenameTemplate";
+			const parentFile = this.plugin.app.vault.getAbstractFileByPath(parentTask.path);
+			const frontmatter = parentFile instanceof TFile
+				? this.plugin.app.metadataCache.getFileCache(parentFile)?.frontmatter
+				: undefined;
+			const override = frontmatter?.[propertyName];
+			const template =
+				typeof override === "string" && override.trim()
+					? override
+					: this.plugin.settings.occurrenceFilenameTemplate;
+			return typeof template === "string" && template.trim() ? template : undefined;
+		} catch (error) {
+			tasknotesLogger.warn("Failed to resolve occurrence filename template:", {
+				category: "persistence",
+				operation: "resolving-occurrence-filename-template",
+				error,
+			});
+			return this.plugin.settings.occurrenceFilenameTemplate?.trim() || undefined;
+		}
 	}
 
 	async findMaterializedOccurrence(
@@ -940,12 +1108,14 @@ export class TaskService {
 		}
 
 		const currentTimestamp = getCurrentTimestamp();
-		const plan = isCompleted
+		let plan = isCompleted
 			? buildMaterializedOccurrenceCompletePlan({
 					occurrenceTask: updatedOccurrence,
 					parentTask,
 					completedStatus: this.normalizeStatusValue(newValue),
 					currentTimestamp,
+					completionDate:
+						updatedOccurrence.completedDate || getCurrentDateString(),
 					maintainDueDateOffsetInRecurring:
 						this.plugin.settings.maintainDueDateOffsetInRecurring,
 				})
@@ -955,6 +1125,15 @@ export class TaskService {
 					activeStatus: this.normalizeStatusValue(newValue),
 					currentTimestamp,
 				});
+
+		if (isCompleted) {
+			plan = this.adjustRescheduledOccurrenceCompletionProgression(
+				plan,
+				updatedOccurrence,
+				parentTask,
+				currentTimestamp
+			);
+		}
 
 		const updatedParent = await this.persistTaskInfoUpdates(
 			parentTask,
@@ -995,6 +1174,90 @@ export class TaskService {
 		}
 	}
 
+	private adjustRescheduledOccurrenceCompletionProgression(
+		plan: MaterializedOccurrenceStatusPlan,
+		occurrenceTask: TaskInfo,
+		parentTask: TaskInfo,
+		currentTimestamp: string
+	): MaterializedOccurrenceStatusPlan {
+		const progressionDate = this.getRescheduledOccurrenceProgressionDate(occurrenceTask);
+		if (!progressionDate || typeof parentTask.recurrence !== "string") {
+			return plan;
+		}
+
+		const recurrence =
+			typeof plan.updatedParentTask.recurrence === "string"
+				? plan.updatedParentTask.recurrence
+				: parentTask.recurrence;
+		const recurrenceAnchor = plan.updatedParentTask.recurrence_anchor || "scheduled";
+		if (recurrenceAnchor === "completion") {
+			return plan;
+		}
+
+		const nextDates = updateToNextScheduledOccurrence(
+			{
+				...plan.updatedParentTask,
+				recurrence,
+				scheduled: occurrenceTask.scheduled || progressionDate,
+				due: occurrenceTask.due ?? parentTask.due,
+			},
+			this.plugin.settings.maintainDueDateOffsetInRecurring,
+			{ minOccurrenceDate: progressionDate }
+		);
+
+		const parentUpdates: Partial<TaskInfo> = {
+			...plan.parentUpdates,
+			recurrence,
+			dateModified: currentTimestamp,
+		};
+		if (nextDates.scheduled) {
+			parentUpdates.scheduled = nextDates.scheduled;
+		} else {
+			delete parentUpdates.scheduled;
+		}
+		if (nextDates.due) {
+			parentUpdates.due = nextDates.due;
+		} else {
+			delete parentUpdates.due;
+		}
+
+		const updatedParentTask: TaskInfo = { ...parentTask, ...parentUpdates };
+		const materializeNextDate = plan.materializeNextDate
+			? getDatePart(updatedParentTask.scheduled || "")
+			: undefined;
+
+		return {
+			...plan,
+			updatedParentTask,
+			parentUpdates,
+			parentFields: taskInfoToSpecFields(parentUpdates),
+			materializeNextDate: materializeNextDate || undefined,
+			changed: true,
+		};
+	}
+
+	private getRescheduledOccurrenceProgressionDate(occurrenceTask: TaskInfo): string | null {
+		const occurrenceDate = this.getSafeDatePart(occurrenceTask.occurrence_date);
+		const scheduledDate = this.getSafeDatePart(occurrenceTask.scheduled);
+		if (!occurrenceDate || !scheduledDate || scheduledDate <= occurrenceDate) {
+			return null;
+		}
+
+		return scheduledDate;
+	}
+
+	private getSafeDatePart(value: string | undefined): string {
+		if (!value) {
+			return "";
+		}
+
+		try {
+			return getDatePart(value);
+		} catch {
+			return "";
+		}
+	}
+
 	private async resolveOccurrenceParentTask(occurrenceTask: TaskInfo): Promise<TaskInfo | null> {
 		if (!occurrenceTask.recurrence_parent) {
 			return null;
@@ -1025,18 +1288,11 @@ export class TaskService {
 	}
 
 	private buildOccurrenceParentReference(parentTask: TaskInfo): string {
-		const parentFile = this.plugin.app.vault.getAbstractFileByPath(parentTask.path);
-		if (parentFile instanceof TFile) {
-			return generateLink(
-				this.plugin.app,
-				parentFile,
-				"",
-				undefined,
-				undefined,
-				this.plugin.settings.useFrontmatterMarkdownLinks
-			);
+		// Occurrences may be created in any folder. Shortest links generated before
+		// creation can become ambiguous when the occurrence shares its parent's name.
+		if (this.plugin.settings.useFrontmatterMarkdownLinks) {
+			return `[${parentTask.title}](<${encodeURI(parentTask.path).replace(/\(/g, "%28").replace(/\)/g, "%29")}>)`;
 		}
-
 		return `[[${parentTask.path.replace(/\.md$/i, "")}]]`;
 	}
 
@@ -1072,7 +1328,7 @@ export class TaskService {
 		}
 
 		const updatedTask: TaskInfo = { ...task, ...updates };
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			this.applyModelTaskUpdatesToFrontmatter(frontmatter, updates);
 		});
 
@@ -1126,7 +1382,7 @@ export class TaskService {
 		const { updatedTask, isCurrentlyArchived, dateModified } = archivePlan;
 
 		// Step 2: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
 			applyTaskArchiveFrontmatterChange({
 				frontmatter,
@@ -1316,7 +1572,7 @@ export class TaskService {
 		const { updatedTask, newEntry } = timeTrackingPlan;
 
 		// Step 2: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const timeEntriesField = this.plugin.fieldMapper.toUserField("timeEntries");
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
 			applyStartTimeTrackingFrontmatterChange({
@@ -1394,7 +1650,7 @@ export class TaskService {
 		const { updatedTask } = timeTrackingPlan;
 
 		// Step 2: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const timeEntriesField = this.plugin.fieldMapper.toUserField("timeEntries");
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
 			applyStopTimeTrackingFrontmatterChange({
@@ -1457,7 +1713,9 @@ export class TaskService {
 		originalTask: TaskInfo,
 		updates: Partial<TaskInfo> & { details?: string }
 	): Promise<TaskInfo> {
-		return this.taskUpdateService.updateTask(originalTask, updates);
+		const updatedTask = await this.taskUpdateService.updateTask(originalTask, updates);
+		await this.seedInitialOccurrence(updatedTask, originalTask);
+		return updatedTask;
 	}
 
 	async updateBlockingRelationships(
@@ -1643,7 +1901,7 @@ export class TaskService {
 		const { updatedTask, dateStr, newComplete, targetDate } = recurringPlan;
 
 		// Step 2: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const completeInstancesField = this.plugin.fieldMapper.toUserField("completeInstances");
 			const skippedInstancesField = this.plugin.fieldMapper.toUserField("skippedInstances");
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
@@ -1672,20 +1930,24 @@ export class TaskService {
 
 		// Step 2b: Reset checkboxes in task body when completing (if setting enabled)
 		if (newComplete && this.plugin.settings.resetCheckboxesOnRecurrence) {
-			const currentContent = await this.plugin.app.vault.read(file);
-			const { frontmatter: frontmatterText, body } = splitFrontmatterAndBody(currentContent);
-			const { content: resetBody, changed } = resetMarkdownCheckboxes(body);
+			let resetDetails: string | null = null;
+			await processVaultFile(this.plugin.app, file, (currentContent) => {
+				const { frontmatter: frontmatterText, body } =
+					splitFrontmatterAndBody(currentContent);
+				const { content: resetBody, changed } = resetMarkdownCheckboxes(body);
+				if (!changed) {
+					return currentContent;
+				}
 
-			if (changed) {
 				const frontmatterBlock =
 					frontmatterText !== null ? `---\n${frontmatterText}\n---\n\n` : "";
 				const finalBody = resetBody.trimEnd();
-				const newContent =
-					finalBody.length > 0 ? `${frontmatterBlock}${finalBody}\n` : frontmatterBlock;
-				await this.plugin.app.vault.modify(file, newContent);
+				resetDetails = resetBody.replace(/\r\n/g, "\n").trimEnd();
+				return finalBody.length > 0 ? `${frontmatterBlock}${finalBody}\n` : frontmatterBlock;
+			});
 
-				// Update the details field in the returned task
-				updatedTask.details = resetBody.replace(/\r\n/g, "\n").trimEnd();
+			if (resetDetails !== null) {
+				updatedTask.details = resetDetails;
 			}
 		}
 
@@ -1793,7 +2055,7 @@ export class TaskService {
 		const { updatedTask, dateStr, newSkipped, targetDate } = recurringPlan;
 
 		// Step 3: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const skippedField = this.plugin.fieldMapper.toUserField("skippedInstances");
 			const completeField = this.plugin.fieldMapper.toUserField("completeInstances");
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
@@ -1888,7 +2150,7 @@ export class TaskService {
 		const { updatedTask } = deletePlan;
 
 		// Step 2: Persist to file
-		await this.plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await processVaultFrontMatter(this.plugin.app, file, (frontmatter) => {
 			const timeEntriesField = this.plugin.fieldMapper.toUserField("timeEntries");
 			const dateModifiedField = this.plugin.fieldMapper.toUserField("dateModified");
 			applyDeleteTimeEntryFrontmatterChange({

@@ -139,7 +139,10 @@ export class PomodoroService {
 		}
 
 		try {
-			const data = (await this.plugin.loadData()) || {};
+			const data = await this.plugin.loadPluginDataForSafeWrite(
+				"persist-pomodoro-task-path-file-rename"
+			);
+			if (!data) return;
 			let shouldSaveData = false;
 
 			if (stateChanged) {
@@ -202,7 +205,10 @@ export class PomodoroService {
 
 	async loadState() {
 		try {
-			const data = await this.plugin.loadData();
+			const data = (await this.plugin.loadData()) as {
+				pomodoroState?: PomodoroState;
+				lastPomodoroDate?: string;
+			} | null;
 
 			if (data?.pomodoroState) {
 				this.state = data.pomodoroState;
@@ -259,7 +265,8 @@ export class PomodoroService {
 
 	async saveState() {
 		try {
-			const data = (await this.plugin.loadData()) || {};
+			const data = await this.plugin.loadPluginDataForSafeWrite("save-pomodoro-state");
+			if (!data) return;
 			const today = formatDateForStorage(getTodayLocal());
 			if (!shouldPersistPomodoroState(data, this.state, today)) {
 				return;
@@ -280,7 +287,8 @@ export class PomodoroService {
 		this.lastSelectedTaskPath = taskPath;
 		this.lastSelectedTaskPathLoaded = true;
 		try {
-			const data = (await this.plugin.loadData()) || {};
+			const data = await this.plugin.loadPluginDataForSafeWrite("save-last-selected-task");
+			if (!data) return;
 			if (!shouldPersistLastSelectedTask(data, taskPath)) {
 				return;
 			}
@@ -304,7 +312,9 @@ export class PomodoroService {
 			return this.lastSelectedTaskPath;
 		}
 		try {
-			const data = await this.plugin.loadData();
+			const data = (await this.plugin.loadData()) as {
+				lastSelectedTaskPath?: unknown;
+			} | null;
 			const path = data?.lastSelectedTaskPath;
 			if (typeof path === "string" && path.trim().length > 0) {
 				this.lastSelectedTaskPath = path;
@@ -1428,13 +1438,16 @@ export class PomodoroService {
 	}
 
 	private async loadPluginHistory(): Promise<PomodoroSessionHistory[]> {
-		const data = await this.plugin.loadData();
+		const data = (await this.plugin.loadData()) as {
+			pomodoroHistory?: PomodoroSessionHistory[];
+		} | null;
 		const pluginHistory = data?.pomodoroHistory;
 		return Array.isArray(pluginHistory) ? pluginHistory : [];
 	}
 
 	private async savePluginHistory(history: PomodoroSessionHistory[]): Promise<void> {
-		const data = (await this.plugin.loadData()) || {};
+		const data = await this.plugin.loadPluginDataForSafeWrite("save-pomodoro-history");
+		if (!data) return;
 		data.pomodoroHistory = history;
 		await this.plugin.saveData(data);
 	}
@@ -1800,8 +1813,11 @@ export class PomodoroService {
 			}
 
 			// Load existing plugin data
-			const data = await this.plugin.loadData();
-			const pluginHistory = data?.pomodoroHistory || [];
+			const data = (await this.plugin.loadData()) as {
+				pomodoroHistory?: PomodoroSessionHistory[];
+			} | null;
+			if (!data) return;
+			const pluginHistory = data.pomodoroHistory || [];
 
 			if (pluginHistory.length === 0) {
 				return; // Nothing to migrate
@@ -1814,7 +1830,8 @@ export class PomodoroService {
 			data.pomodoroHistory = [];
 			await this.plugin.saveData(data);
 
-			publishUserNotice(this.plugin.emitter,
+			publishUserNotice(
+				this.plugin.emitter,
 				this.translate("services.pomodoro.notices.migrationSuccess", {
 					count: pluginHistory.length,
 				})
@@ -1830,3 +1847,5 @@ export class PomodoroService {
 		}
 	}
 }
+
+/* eslint-enable @typescript-eslint/no-non-null-assertion -- Re-enable after the Pomodoro service implementation. */

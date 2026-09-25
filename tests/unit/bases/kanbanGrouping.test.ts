@@ -11,6 +11,7 @@ import {
 	findKanbanStatusConfigForGroupKey,
 	formatKanbanColumnCount,
 	getKanbanColumnTaskCounts,
+	getVisibleKanbanSwimLaneColumnKeys,
 	getConfiguredKanbanOrder,
 	getKanbanListPropertyValue,
 	getKanbanStatusGroupKeyAliases,
@@ -374,6 +375,80 @@ describe("Kanban grouping helpers", () => {
 		);
 	});
 
+	it("hides columns that are empty across all swimlanes when hideEmptyColumns is enabled", () => {
+		const swimlanes = new Map<string, Map<string, TestTask[]>>([
+			[
+				"Research",
+				new Map([
+					["todo", [task("a.md")]],
+					["done", []],
+					["blocked", []],
+				]),
+			],
+			[
+				"Review",
+				new Map([
+					["todo", [task("b.md")]],
+					["done", []],
+					["blocked", []],
+				]),
+			],
+		]);
+
+		expect(
+			getVisibleKanbanSwimLaneColumnKeys(
+				["todo", "done", "blocked"],
+				swimlanes,
+				true,
+				[]
+			)
+		).toEqual(["todo"]);
+	});
+
+	it("keeps empty pinned columns even when hideEmptyColumns is enabled", () => {
+		const swimlanes = new Map<string, Map<string, TestTask[]>>([
+			[
+				"Research",
+				new Map([
+					["todo", [task("a.md")]],
+					["done", []],
+					["blocked", []],
+				]),
+			],
+		]);
+
+		expect(
+			getVisibleKanbanSwimLaneColumnKeys(
+				["todo", "done", "blocked"],
+				swimlanes,
+				true,
+				["done"]
+			)
+		).toEqual(["todo", "done"]);
+	});
+
+	it("keeps all columns when hideEmptyColumns is disabled", () => {
+		const swimlanes = new Map<string, Map<string, TestTask[]>>([
+			[
+				"Research",
+				new Map([
+					["todo", [task("a.md")]],
+					["done", []],
+					["blocked", []],
+				]),
+			],
+		]);
+
+		expect(
+			getVisibleKanbanSwimLaneColumnKeys(
+				["todo", "done", "blocked"],
+				swimlanes,
+				false,
+				[]
+			)
+		).toEqual(["todo", "done", "blocked"]);
+	});
+
 	it("orders columns from saved order and appends default-ordered new columns", () => {
 		const order = applyKanbanColumnOrder({
 			groupBy: "task.status",
@@ -468,6 +543,7 @@ describe("Kanban grouping helpers", () => {
 			columnKeys: ["todo", "done"],
 			swimLaneOrders: { priority: ["medium", "low", "high"] },
 			hideEmptySwimLanes: false,
+			priorityKeys: [],
 			isPriorityField: (propertyId) => propertyId === "task.priority",
 			isStatusField: () => false,
 			getPriorityWeight: (key) => ({ high: 3, medium: 2, low: 1 })[key] ?? 0,
@@ -489,6 +565,7 @@ describe("Kanban grouping helpers", () => {
 			columnKeys: ["todo", "done"],
 			swimLaneOrders: { priority: ["medium", "low", "high"] },
 			hideEmptySwimLanes: true,
+			priorityKeys: [],
 			isPriorityField: (propertyId) => propertyId === "task.priority",
 			isStatusField: () => false,
 			getPriorityWeight: (key) => ({ high: 3, medium: 2, low: 1 })[key] ?? 0,
@@ -496,6 +573,40 @@ describe("Kanban grouping helpers", () => {
 		});
 
 		expect([...hiddenEmpty.keys()]).toEqual(["low"]);
+	});
+
+	it("shows all configured priority swimlanes even when only hidden subtasks have those values", () => {
+		const parent = task("parent.md");
+		const visibleLanes = new Map([
+			["low", new Map([["todo", [parent]]])],
+		]);
+		const options = {
+			swimLanePropertyId: "task.priority",
+			swimLanes: visibleLanes,
+			columnKeys: ["todo", "done"],
+			swimLaneOrders: {},
+			priorityKeys: ["high", "medium", "low", "none"],
+			isPriorityField: (propertyId: string | null) => propertyId === "task.priority",
+			isStatusField: () => false,
+			getPriorityWeight: (key: string) => ({ high: 3, medium: 2, low: 1 })[key] ?? 0,
+			getStatusOrder: () => 0,
+		};
+
+		const shown = applyKanbanSwimLaneOrderToMap({
+			...options,
+			hideEmptySwimLanes: false,
+		});
+		expect([...shown.keys()]).toEqual(["high", "medium", "low", "none"]);
+		expect(shown.get("high")?.get("todo")).toEqual([]);
+		expect(shown.get("medium")?.get("done")).toEqual([]);
+		expect(shown.get("low")?.get("todo")).toEqual([parent]);
+		expect([...visibleLanes.keys()]).toEqual(["low"]);
+
+		const hidden = applyKanbanSwimLaneOrderToMap({
+			...options,
+			hideEmptySwimLanes: true,
+		});
+		expect([...hidden.keys()]).toEqual(["low"]);
 	});
 
 	it("exposes small ordering helpers for view adapters", () => {

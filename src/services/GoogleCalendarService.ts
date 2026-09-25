@@ -13,9 +13,10 @@ import {
 	TokenExpiredError,
 } from "./errors";
 import { validateCalendarId, validateEventId, validateRequired } from "./validation";
-import { CalendarProvider, ProviderCalendar } from "./CalendarProvider";
+import { CalendarProvider, findProviderCalendar, ProviderCalendar } from "./CalendarProvider";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 import { publishUserNotice } from "../core/userNotices";
+import { normalizeCalendarDescription } from "../utils/calendarDescription";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Services/GoogleCalendarService" });
 
@@ -161,6 +162,14 @@ export class GoogleCalendarService extends CalendarProvider {
 	 */
 	getAvailableCalendars(): ProviderCalendar[] {
 		return this.availableCalendars;
+	}
+
+	getConnectionGeneration(): number {
+		return this.oauthService.getConnectionGeneration("google");
+	}
+
+	async isConnectionGenerationCurrent(expectedGeneration: number): Promise<boolean> {
+		return this.oauthService.isConnectionGenerationCurrent("google", expectedGeneration);
 	}
 
 	/**
@@ -334,6 +343,32 @@ export class GoogleCalendarService extends CalendarProvider {
 			let nextSyncToken: string | undefined;
 			let isFullSync = !syncToken;
 			let hasDeletes = false;
+			let fullSyncTimeMin: Date | undefined;
+			let fullSyncTimeMax: Date | undefined;
+
+			if (!syncToken) {
+				const now = new Date();
+				fullSyncTimeMin =
+					timeMin ||
+					new Date(
+						now.getTime() -
+							GOOGLE_CALENDAR_CONSTANTS.VIEW_RANGE.DAYS_BEFORE *
+								24 *
+								60 *
+								60 *
+								1000
+					);
+				fullSyncTimeMax =
+					timeMax ||
+					new Date(
+						now.getTime() +
+							GOOGLE_CALENDAR_CONSTANTS.VIEW_RANGE.DAYS_AFTER *
+								24 *
+								60 *
+								60 *
+								1000
+					);
+			}
 
 			do {
 				try {
@@ -342,39 +377,20 @@ export class GoogleCalendarService extends CalendarProvider {
 						maxResults: GOOGLE_CALENDAR_CONSTANTS.MAX_RESULTS_PER_REQUEST.toString(),
 					});
 
-					if (syncToken && !nextPageToken) {
+					if (syncToken) {
 						// Incremental sync mode - use syncToken
 						// NOTE: Cannot use timeMin/timeMax with syncToken
 						params.set("syncToken", syncToken);
-					} else if (nextPageToken) {
-						// Pagination mode - use pageToken
-						params.set("pageToken", nextPageToken);
 					} else {
 						// Full sync mode - use time range and orderBy
-						const now = new Date();
-						const defaultTimeMin =
-							timeMin ||
-							new Date(
-								now.getTime() -
-									GOOGLE_CALENDAR_CONSTANTS.VIEW_RANGE.DAYS_BEFORE *
-										24 *
-										60 *
-										60 *
-										1000
-							);
-						const defaultTimeMax =
-							timeMax ||
-							new Date(
-								now.getTime() +
-									GOOGLE_CALENDAR_CONSTANTS.VIEW_RANGE.DAYS_AFTER *
-										24 *
-										60 *
-										60 *
-										1000
-							);
-						params.set("timeMin", defaultTimeMin.toISOString());
-						params.set("timeMax", defaultTimeMax.toISOString());
+						params.set("timeMin", fullSyncTimeMin!.toISOString());
+						params.set("timeMax", fullSyncTimeMax!.toISOString());
 						params.set("orderBy", "startTime");
+					}
+
+					if (nextPageToken) {
+						// Google page tokens are bound to the original query parameters.
+						params.set("pageToken", nextPageToken);
 					}
 
 					// Wrap the API call with retry logic
@@ -439,6 +455,20 @@ export class GoogleCalendarService extends CalendarProvider {
 	}
 
 	/**
+	 * Resolves a calendar's color, including for calendars fetched under the
+	 * primary alias, whose colors are cached under the account's real calendar id.
+	 */
+	private getCalendarColor(calendarId: string): string | undefined {
+		const directColor = this.calendarColors.get(calendarId);
+		if (directColor) {
+			return directColor;
+		}
+
+		const calendar = findProviderCalendar(this.availableCalendars, calendarId);
+		return calendar ? this.calendarColors.get(calendar.id) : undefined;
+	}
+
+	/**
 	 * Converts a Google Calendar event to TaskNotes ICSEvent format
 	 */
 	private convertToICSEvent(googleEvent: GoogleCalendarEvent, calendarId: string): ICSEvent {
@@ -476,7 +506,7 @@ export class GoogleCalendarService extends CalendarProvider {
 
 		// Priority 2: Calendar-level color (from calendar metadata)
 		if (!color) {
-			color = this.calendarColors.get(calendarId);
+			color = this.getCalendarColor(calendarId);
 		}
 
 		// Priority 3: Default Google Calendar blue
@@ -492,7 +522,7 @@ export class GoogleCalendarService extends CalendarProvider {
 			id: `google-${calendarId}-${googleEvent.id}`,
 			subscriptionId: `google-${calendarId}`,
 			title: googleEvent.summary || "Untitled Event",
-			description: googleEvent.description,
+			description: normalizeCalendarDescription(googleEvent.description),
 			start: start,
 			end: end,
 			allDay: allDay,
@@ -654,8 +684,8 @@ export class GoogleCalendarService extends CalendarProvider {
 			return;
 		}
 
-		this.lastManualRefresh = now;
 		await this.refreshAllCalendars({ propagateErrors: true });
+		this.lastManualRefresh = Date.now();
 	}
 
 	/**
@@ -686,7 +716,8 @@ export class GoogleCalendarService extends CalendarProvider {
 			};
 			colorId?: string;
 			recurrence?: string[];
-		}
+		},
+		expectedConnectionGeneration?: number
 	): Promise<ICSEvent> {
 		// Validate inputs
 		validateCalendarId(calendarId);
@@ -694,7 +725,10 @@ export class GoogleCalendarService extends CalendarProvider {
 		validateRequired(updates, "updates");
 
 		try {
-			const token = await this.oauthService.getValidToken("google");
+			const token = await this.oauthService.getValidToken(
+				"google",
+				expectedConnectionGeneration
+			);
 
 			// First, get the current event to merge with updates
 			const getResponse = await this.withRetry(async () => {
@@ -845,7 +879,8 @@ export class GoogleCalendarService extends CalendarProvider {
 			};
 			colorId?: string;
 			recurrence?: string[];
-		}
+		},
+		expectedConnectionGeneration?: number
 	): Promise<ICSEvent> {
 		// Validate inputs
 		validateCalendarId(calendarId);
@@ -858,7 +893,10 @@ export class GoogleCalendarService extends CalendarProvider {
 		validateRequired(event.end, "event.end");
 
 		try {
-			const token = await this.oauthService.getValidToken("google");
+			const token = await this.oauthService.getValidToken(
+				"google",
+				expectedConnectionGeneration
+			);
 
 			// Build Google Calendar API payload
 			const payload: GoogleCalendarEventPayload = {
@@ -945,13 +983,20 @@ export class GoogleCalendarService extends CalendarProvider {
 	/**
 	 * Deletes a Google Calendar event
 	 */
-	async deleteEvent(calendarId: string, eventId: string): Promise<void> {
+	async deleteEvent(
+		calendarId: string,
+		eventId: string,
+		expectedConnectionGeneration?: number
+	): Promise<void> {
 		// Validate inputs
 		validateCalendarId(calendarId);
 		validateEventId(eventId);
 
 		try {
-			const token = await this.oauthService.getValidToken("google");
+			const token = await this.oauthService.getValidToken(
+				"google",
+				expectedConnectionGeneration
+			);
 
 			await this.withRetry(async () => {
 				return await requestUrl({
@@ -1047,3 +1092,5 @@ export class GoogleCalendarService extends CalendarProvider {
 		this.removeAllListeners();
 	}
 }
+
+/* eslint-enable @typescript-eslint/no-non-null-assertion -- Re-enable after the calendar service implementation. */

@@ -7,6 +7,34 @@ on:
     branches: [ main, develop, v3-maintenance ]
 
 jobs:
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci --prefer-offline --no-audit
+      timeout-minutes: 5
+
+    - name: Test bundle size guard and dependency deduplication
+      run: node --test scripts/check-bundle-size.test.mjs scripts/bundle-dependencies.test.mjs
+
+    - name: Build production plugin
+      run: npm run build
+      timeout-minutes: 10
+
+    - name: Check Obsidian Sync bundle size budget
+      run: npm run check:bundle-size
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -69,6 +97,11 @@ jobs:
         echo "NPM version: $(npm --version)"
         echo "Timezone: $(date)"
         echo "Jest version: $(npx jest --version)"
+
+    - name: Install documentation dependencies
+      run: npm ci
+      working-directory: docs-builder
+      timeout-minutes: 3
 
     - name: Run docs quality checks
       run: npm run docs:check

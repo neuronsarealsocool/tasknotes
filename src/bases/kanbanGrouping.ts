@@ -573,6 +573,8 @@ export function buildKanbanTaskGroups(options: KanbanTaskGroupingOptions): Map<s
 	const groups = new Map<string, TaskInfo[]>();
 	const taskOrder = new Map(options.taskNotes.map((task, index) => [task.path, index]));
 	const cleanGroupBy = stripPropertyPrefix(options.groupByPropertyId);
+	const isStatusGroup = options.isStatusGroupingProperty(options.groupByPropertyId);
+	const isPriorityGroup = options.isPriorityGroupingProperty(options.groupByPropertyId);
 	const shouldExplode =
 		options.explodeListColumns && options.isListTypeProperty(cleanGroupBy);
 
@@ -584,6 +586,14 @@ export function buildKanbanTaskGroups(options: KanbanTaskGroupingOptions): Map<s
 			for (const columnKey of columnKeys) {
 				addKanbanTaskToGroup(groups, columnKey, task);
 			}
+		}
+	} else if (isStatusGroup || isPriorityGroup) {
+		for (const task of options.taskNotes) {
+			const rawValue = isStatusGroup ? task.status : task.priority;
+			const rawGroupKey = valueToKanbanGroupString(rawValue);
+			const groupKey = options.canonicalizeGroupKey(rawGroupKey, options.groupByPropertyId);
+
+			addKanbanTaskToGroup(groups, groupKey, task);
 		}
 	} else {
 		const tasksByPath = new Map(options.taskNotes.map((task) => [task.path, task]));
@@ -679,6 +689,22 @@ export function getKanbanColumnTaskCounts<TTask>(
 	}
 
 	return counts;
+}
+
+export function getVisibleKanbanSwimLaneColumnKeys<TTask>(
+	columnKeys: readonly string[],
+	swimLanes: ReadonlyMap<string, ReadonlyMap<string, readonly TTask[]>>,
+	hideEmptyColumns: boolean,
+	pinnedColumns: readonly string[]
+): string[] {
+	if (!hideEmptyColumns) {
+		return [...columnKeys];
+	}
+
+	const counts = getKanbanColumnTaskCounts(swimLanes, columnKeys);
+	return columnKeys.filter(
+		(columnKey) => (counts.get(columnKey) ?? 0) > 0 || pinnedColumns.includes(columnKey)
+	);
 }
 
 export function compareKanbanSpecialColumnKeys(a: string, b: string): number {
@@ -819,7 +845,12 @@ export function applyDefaultKanbanSwimLaneOrder(options: {
 		});
 	}
 
-	return orderedKeys.sort();
+	// No configured or priority/status default applies. Preserve the incoming
+	// key order instead of sorting alphabetically: `actualKeys` derives from the
+	// Bases-sorted task sequence, so this keeps global sort-driven swimlane row
+	// ordering (#2256) — e.g. a formula sort like `daysUntilDue` floats the
+	// swimlane holding the nearest due date to the top.
+	return orderedKeys;
 }
 
 export function applyKanbanSwimLaneOrder(options: {
@@ -871,14 +902,21 @@ export function applyKanbanSwimLaneOrderToMap<TTask>(options: {
 	columnKeys: readonly string[];
 	swimLaneOrders: Readonly<Record<string, readonly string[]>>;
 	hideEmptySwimLanes: boolean;
+	priorityKeys: readonly string[];
 	isPriorityField: (propertyId: string | null) => boolean;
 	isStatusField: (propertyId: string | null) => boolean;
 	getPriorityWeight: (key: string) => number;
 	getStatusOrder: (key: string) => number;
 }): Map<string, Map<string, TTask[]>> {
+	const actualKeys = Array.from(options.swimLanes.keys());
+	if (!options.hideEmptySwimLanes && options.isPriorityField(options.swimLanePropertyId)) {
+		for (const key of options.priorityKeys) {
+			if (!options.swimLanes.has(key)) actualKeys.push(key);
+		}
+	}
 	const orderedKeys = applyKanbanSwimLaneOrder({
 		swimLanePropertyId: options.swimLanePropertyId,
-		actualKeys: Array.from(options.swimLanes.keys()),
+		actualKeys,
 		swimLaneOrders: options.swimLaneOrders,
 		hideEmptySwimLanes: options.hideEmptySwimLanes,
 		isPriorityField: options.isPriorityField,

@@ -1,6 +1,5 @@
 # Calendar Integration
 
-
 TaskNotes provides calendar integration through OAuth-connected calendar services, two Bases-powered calendar views, and read-only ICS calendar subscriptions.
 
 ## OAuth Calendar Integration
@@ -31,7 +30,7 @@ OAuth calendar integration requires creating an OAuth application with your cale
 
 ### Token Management
 
-TaskNotes stores OAuth access tokens and refresh tokens locally. Tokens are refreshed automatically before expiration. You can revoke access at any time through the integrations settings.
+TaskNotes stores OAuth client credentials, access tokens, and refresh tokens in Obsidian Secret Storage, which is encrypted at rest when supported by the operating system and kept separate from TaskNotes' `data.json`. Tokens are refreshed automatically before expiration. You can revoke account access or forget the saved OAuth app credentials through the integrations settings.
 
 ## Calendar Views
 
@@ -72,6 +71,8 @@ Access the time entry editor by clicking an existing time entry in the calendar.
 TaskNotes can subscribe to external calendar feeds using the iCalendar (ICS) format. This provides read-only access to events from calendar services. ICS subscriptions differ from OAuth calendar integration in that they are read-only—dragging ICS events to new dates does not update the source calendar.
 
 Add and manage ICS subscriptions from `Settings -> TaskNotes -> Integrations` (Calendar Subscriptions section).
+
+Cancelled events are hidden. A guest declining an invitation does not hide the meeting. When a feed's `X-WR-CALNAME` is an email address (as in many personal Google Calendar feeds), TaskNotes matches that address to the owner's `ATTENDEE` response and hides meetings they declined. Recurring exceptions can override the series response. If the feed does not identify the owner, TaskNotes keeps events visible rather than guessing whose response applies. This does not use the subscription's display name. Refresh the subscription after updating to restore previously hidden meetings.
 
 For details on creating notes and tasks from calendar events, see [ICS Integration](ics-integration.md).
 

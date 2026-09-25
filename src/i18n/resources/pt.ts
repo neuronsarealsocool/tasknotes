@@ -235,6 +235,7 @@ export const pt: TranslationTree = {
 				events: {
 					showScheduledTasks: "Mostrar tarefas agendadas",
 					showDueTasks: "Mostrar tarefas com vencimento",
+					showOverdueOnToday: "Mostrar tarefas atrasadas na data de hoje",
 					showRecurringTasks: "Mostrar tarefas recorrentes",
 					showTimeEntries: "Mostrar registros de tempo",
 					showTimeblocks: "Mostrar blocos de tempo",
@@ -482,7 +483,7 @@ export const pt: TranslationTree = {
 			viewAllLink: "Ver todas as notas de lançamento no GitHub →",
 			starMessage:
 				"Agradecemos muito todo feedback. Se algo não parecer certo, conte para nós no GitHub. Se você acha o TaskNotes útil, considere dar uma estrela.",
-			baseFilesNotice: "> [!info] Sobre os arquivos `.base` padrão\n> Alterações nos modelos `.base` gerados por padrão não substituem seus arquivos `.base` existentes, para manter suas personalizações.\n> Se quiser as melhorias mais recentes dos modelos, regenere os arquivos base em **Configurações → TaskNotes → Geral → Visualizações e arquivos base → Criar arquivos**."
+			baseFilesNotice: "> [!info] Sobre os arquivos `.base` padrão\n> Alterações nos modelos `.base` gerados por padrão não substituem seus arquivos `.base` existentes, para manter suas personalizações.\n> Se quiser as melhorias mais recentes dos modelos, regenere os arquivos base em **Configurações → TaskNotes → Geral → Visualizações e arquivos base → Atualizar arquivos**."
 		}
 	},
 	settings: {
@@ -1114,7 +1115,13 @@ export const pt: TranslationTree = {
 				filenameUpdatesWithTitle: "O nome do arquivo será atualizado automaticamente quando o título da tarefa mudar.",
 				filenameFormat: "Formato do nome do arquivo:",
 				customTemplate: "Modelo personalizado:",
-				legacySyntaxWarning: "A sintaxe de chaves simples como {title} está obsoleta. Por favor, use a sintaxe de chaves duplas {{title}} para consistência com os modelos de corpo."
+				legacySyntaxWarning: "A sintaxe de chaves simples como {title} está obsoleta. Por favor, use a sintaxe de chaves duplas {{title}} para consistência com os modelos de corpo.",
+				occurrenceFilenameTemplate: "Modelo de nome de arquivo das ocorrências",
+				occurrenceFilenameTemplateHelp:
+					"Modelo do nome de arquivo das ocorrências materializadas de tarefas recorrentes. Deixe vazio para manter o nome existente (título da tarefa-mãe com sufixo numérico). Escolha explicitamente a granularidade com {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}} ou {{occurrenceMonthName}}. Todas as variáveis normais de nome de arquivo também funcionam. Uma tarefa-mãe pode sobrescrever este modelo pela propriedade de frontmatter configurada abaixo.",
+				occurrenceFilenameProperty: "Propriedade de sobrescrita do modelo",
+				occurrenceFilenamePropertyHelp:
+					"Nome da propriedade de frontmatter na tarefa recorrente (mãe) que sobrescreve o modelo de nome de arquivo para as ocorrências daquela tarefa."
 			},
 			tagsCard: {
 				nativeObsidianTags: "Usa tags nativas do Obsidian"
@@ -1290,6 +1297,10 @@ export const pt: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "Propriedades visíveis padrão",
 					description: "Escolha quais propriedades aparecem nos cartões de tarefa por padrão."
+				},
+				completionSubmenu: {
+					name: "Agrupar as ações de concluir e pular em um submenu",
+					description: "Coloque as ações de concluir e pular em um submenu do menu de contexto da tarefa. Desative esta opção para exibi-las diretamente no menu."
 				},
 				propertyGroups: {
 					coreProperties: "PROPRIEDADES PRINCIPAIS",
@@ -1969,7 +1980,7 @@ export const pt: TranslationTree = {
 				},
 				authToken: {
 					name: "Token de autenticação da API",
-					description: "Token necessário para autenticação da API (deixe em branco para sem autenticação)",
+					description: "Token do TaskNotes, não a chave de API do seu provedor de IA. Para gerar um, ative a API HTTP, deixe este campo vazio e reinicie o Obsidian. Depois copie o token gerado para as configurações de autenticação Bearer do cliente. Atualize os clientes sempre que este token mudar.",
 					placeholder: "seu-token-secreto"
 				},
 				mcp: {
@@ -2258,6 +2269,8 @@ export const pt: TranslationTree = {
 		refreshCache: "Atualizar cache",
 		exportAllTasksIcs: "Exportar todas as tarefas como arquivo ICS",
 		viewReleaseNotes: "Ver notas de lançamento",
+		startTimeTrackingCurrentTask: "Iniciar registro de tempo da tarefa atual",
+		stopTimeTrackingCurrentTask: "Parar registro de tempo da tarefa atual",
 		startTimeTrackingWithSelector: "Iniciar registro de tempo (selecionar tarefa)",
 		editTimeEntries: "Editar registros de tempo (selecionar tarefa)",
 		createOrOpenTask: "Criar ou abrir tarefa",
@@ -2871,6 +2884,24 @@ export const pt: TranslationTree = {
 			markIncomplete: "Marcar como incompleta para esta data",
 			skipInstance: "Pular instância",
 			unskipInstance: "Desfazer pulo de instância",
+			completion: {
+				submenu: "Marcar como concluída ou pular",
+				submenuCompleteOnly: "Marcar como concluída",
+				completeToday: "Concluída hoje",
+				completeAsScheduled: "Concluída na data agendada",
+				completeOnDue: "Concluída na data de vencimento",
+				completeOnPicked: "Concluída em (escolher data)",
+				markIncomplete: "Marcar como incompleta",
+				noScheduledDate: "Esta tarefa não tem uma data agendada",
+				noDueDate: "Esta tarefa não tem uma data de vencimento",
+				noPickedDate: "Nenhuma data selecionada",
+				noCompletedStatus: "Nenhum status de conclusão configurado",
+				pickDateTitle: "Escolher data de conclusão",
+				completeFailure: "Falha ao atualizar a conclusão da tarefa: {message}",
+				clearInstancesConfirmTitle: "Limpar as instâncias registradas?",
+				clearInstancesConfirmMessage: "O reagendamento limpará estas instâncias registradas como concluídas ou puladas na nova data ou após ela: {dates}. Elas não estarão mais marcadas como concluídas ou puladas. Continuar?",
+				clearInstancesConfirmButton: "Reagendar e limpar"
+			},
 			quickReminders: {
 				atTime: "Na hora do evento",
 				fiveMinutes: "5 minutos antes",
@@ -3105,7 +3136,8 @@ export const pt: TranslationTree = {
 			recurrenceTooltip: "{label}: {value}",
 			reminderTooltipOne: "1 lembrete definido (clique para gerenciar)",
 			reminderTooltipMany: "{count} lembretes definidos (clique para gerenciar)",
-			projectTooltip: "Esta tarefa é usada como projeto (clique para filtrar subtarefas)",
+			projectTooltip: "Esta tarefa é usada como projeto (clique para mostrar/ocultar subtarefas)",
+			projectIndicatorTooltip: "Esta tarefa é usada como projeto",
 			expandSubtasks: "Expandir subtarefas",
 			collapseSubtasks: "Recolher subtarefas",
 			dueToday: "{label}: Hoje",

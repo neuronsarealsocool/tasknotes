@@ -1,4 +1,10 @@
-import { App, PluginSettingTab, Platform, requireApiVersion } from "obsidian";
+import {
+	App,
+	PluginSettingTab,
+	Platform,
+	requireApiVersion,
+	type SettingDefinitionItem,
+} from "obsidian";
 import TaskNotesPlugin from "../main";
 import { debounce, DebouncedFunction } from "./components/settingHelpers";
 import { renderGeneralTab } from "./tabs/generalTab";
@@ -8,6 +14,7 @@ import { renderAppearanceTab } from "./tabs/appearanceTab";
 import { renderFeaturesTab } from "./tabs/featuresTab";
 import { renderIntegrationsTab } from "./tabs/integrationsTab";
 import type { TranslationKey } from "../i18n";
+import { CardExpansionState } from "./components/CardExpansionState";
 
 interface TabConfig {
 	id: string;
@@ -19,6 +26,7 @@ export class TaskNotesSettingTab extends PluginSettingTab {
 	plugin: TaskNotesPlugin;
 	private activeTab = "general";
 	private tabContents: Record<string, HTMLElement> = {};
+	private readonly cardExpansionState = new CardExpansionState();
 	private debouncedSave: DebouncedFunction<() => Promise<void>> = debounce(
 		() => this.plugin.saveSettings(),
 		500
@@ -36,14 +44,37 @@ export class TaskNotesSettingTab extends PluginSettingTab {
 		this.plugin.registerEvent(
 			this.plugin.i18n.on("locale-changed", () => {
 				if (this.containerEl.isConnected) {
-					this.display();
+					if (requireApiVersion("1.13.0")) {
+						this.update();
+					} else {
+						this.renderSettings(this.containerEl);
+					}
 				}
 			})
 		);
 	}
 
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				name: this.plugin.i18n.translate("common.appName"),
+				aliases: this.getTabConfigurations().map((tab) =>
+					this.plugin.i18n.translate(tab.nameKey)
+				),
+				render: (setting) => {
+					setting.settingEl.empty();
+					this.renderSettings(setting.settingEl);
+				},
+			},
+		];
+	}
+
 	display(): void {
-		const { containerEl } = this;
+		this.renderSettings(this.containerEl);
+	}
+
+	private renderSettings(containerEl: HTMLElement): void {
+		this.tabContents = {};
 		containerEl.empty();
 		containerEl.addClass("tasknotes-settings");
 		containerEl.addClass("tasknotes-plugin");
@@ -55,38 +86,7 @@ export class TaskNotesSettingTab extends PluginSettingTab {
 		const tabNav = settingsToolbar.createDiv("settings-tab-nav settings-view__tab-nav");
 
 		// Define the 6-tab structure (defaults merged into task-properties)
-		const allTabs: TabConfig[] = [
-			{
-				id: "general",
-				nameKey: "settings.tabs.general",
-				renderFn: renderGeneralTab,
-			},
-			{
-				id: "task-properties",
-				nameKey: "settings.tabs.taskProperties",
-				renderFn: renderTaskPropertiesTab,
-			},
-			{
-				id: "modal-fields",
-				nameKey: "settings.tabs.modalFields",
-				renderFn: renderModalFieldsTab,
-			},
-			{
-				id: "appearance",
-				nameKey: "settings.tabs.appearance",
-				renderFn: renderAppearanceTab,
-			},
-			{
-				id: "features",
-				nameKey: "settings.tabs.features",
-				renderFn: renderFeaturesTab,
-			},
-			{
-				id: "integrations",
-				nameKey: "settings.tabs.integrations",
-				renderFn: renderIntegrationsTab,
-			},
-		];
+		const allTabs = this.getTabConfigurations();
 
 		// Filter out integrations tab on mobile if it only contains API settings
 		const tabs = Platform.isMobile
@@ -160,16 +160,22 @@ export class TaskNotesSettingTab extends PluginSettingTab {
 			tabContent.setAttribute("role", "tabpanel");
 			tabContent.setAttribute("id", `settings-tab-${tab.id}`);
 			tabContent.setAttribute("aria-labelledby", `tab-button-${tab.id}`);
+			this.cardExpansionState.bind(tabContent, tab.id);
 
 			if (this.activeTab === tab.id) {
 				tabContent.addClass("active");
 				tabContent.addClass("settings-view__tab-content--active");
 				// Render the active tab content
-				tab.renderFn(tabContent, this.plugin, this.debouncedSave);
+				this.renderTabContent(tab, tabContent);
 			}
 
 			this.tabContents[tab.id] = tabContent;
 		});
+	}
+
+	private renderTabContent(tab: TabConfig, container: HTMLElement): void {
+		tab.renderFn(container, this.plugin, this.debouncedSave);
+		this.cardExpansionState.restore(container, tab.id);
 	}
 
 	private switchTab(tabId: string): void {
@@ -200,7 +206,7 @@ export class TaskNotesSettingTab extends PluginSettingTab {
 			// Find the tab configuration and render it
 			const tabConfig = this.getTabConfigurations().find((tab) => tab.id === tabId);
 			if (tabConfig) {
-				tabConfig.renderFn(activeTabContent, this.plugin, this.debouncedSave);
+				this.renderTabContent(tabConfig, activeTabContent);
 			}
 		}
 

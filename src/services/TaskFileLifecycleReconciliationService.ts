@@ -31,6 +31,7 @@ const RECONCILED_TASK_FIELDS = [
 	"due",
 	"priority",
 	"recurrence",
+	"occurrence_materialization",
 	"complete_instances",
 	"skipped_instances",
 	"timeEstimate",

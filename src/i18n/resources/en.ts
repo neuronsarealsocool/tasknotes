@@ -242,6 +242,7 @@ export const en: TranslationTree = {
 				events: {
 					showScheduledTasks: "Show scheduled tasks",
 					showDueTasks: "Show due tasks",
+					showOverdueOnToday: "Show overdue tasks on today",
 					showRecurringTasks: "Show recurring tasks",
 					showCompletedRecurringInstances: "Show completed recurring instances",
 					showSkippedRecurringInstances: "Show skipped recurring instances",
@@ -495,7 +496,7 @@ export const en: TranslationTree = {
 			starMessage:
 				"We really appreciate all feedback. If something does not feel right, please let us know on GitHub. If you find TaskNotes useful, please consider giving it a star.",
 			baseFilesNotice:
-				"> [!info] About default `.base` files\n> Updates to default generated `.base` templates do not overwrite your existing `.base` files, so your customizations stay safe.\n> If you want the newest template improvements, regenerate base files in **Settings → TaskNotes → General → Views & base files → Create files**.",
+				"> [!info] About default `.base` files\n> Updates to default generated `.base` templates do not overwrite your existing `.base` files, so your customizations stay safe.\n> If you want the newest template improvements, regenerate base files in **Settings → TaskNotes → General → Views & base files → Update files**.",
 		},
 	},
 	settings: {
@@ -1195,6 +1196,12 @@ export const en: TranslationTree = {
 				customTemplate: "Custom template:",
 				legacySyntaxWarning:
 					"Single-brace syntax like {title} is deprecated. Please use double-brace syntax {{title}} instead for consistency with body templates.",
+				occurrenceFilenameTemplate: "Occurrence filename template",
+				occurrenceFilenameTemplateHelp:
+					"Filename template for materialized occurrences of recurring tasks. Leave empty to keep the existing name (parent title plus a numeric suffix). Choose the filename granularity explicitly with {{occurrenceDate}}, {{occurrenceWeek}}, {{occurrenceMonth}}, {{occurrenceYear}}, or {{occurrenceMonthName}}. All regular filename variables also work. A parent task can override this template via the frontmatter property configured below.",
+				occurrenceFilenameProperty: "Occurrence template override property",
+				occurrenceFilenamePropertyHelp:
+					"Name of the frontmatter property on a recurring (parent) task that overrides the occurrence filename template for that task's occurrences.",
 			},
 			tagsCard: {
 				nativeObsidianTags: "Uses native Obsidian tags",
@@ -1378,6 +1385,11 @@ export const en: TranslationTree = {
 				defaultVisibleProperties: {
 					name: "Default visible properties",
 					description: "Choose which properties appear on task cards by default.",
+				},
+				completionSubmenu: {
+					name: "Group complete and skip actions in a submenu",
+					description:
+						"Nest the complete and skip actions under a submenu in the task context menu. Turn off to show them directly in the menu.",
 				},
 				propertyGroups: {
 					coreProperties: "Core properties",
@@ -2106,7 +2118,7 @@ export const en: TranslationTree = {
 				},
 				authToken: {
 					name: "API authentication token",
-					description: "Token required for API authentication (leave empty for no auth)",
+					description: "TaskNotes token, not your AI provider's API key. To generate one, enable HTTP API, leave this field empty, and restart Obsidian. Then copy the generated token into your client's bearer authentication settings. Update clients whenever this token changes.",
 					placeholder: "your-secret-token",
 				},
 				mcp: {
@@ -2419,6 +2431,8 @@ export const en: TranslationTree = {
 		syncAllTasksGoogleCalendar: "Sync all tasks to Google Calendar",
 		syncCurrentTaskGoogleCalendar: "Sync current task to Google Calendar",
 		viewReleaseNotes: "View release notes",
+		startTimeTrackingCurrentTask: "Start time tracking for current task",
+		stopTimeTrackingCurrentTask: "Stop time tracking for current task",
 		startTimeTrackingWithSelector: "Start time tracking (select task)",
 		editTimeEntries: "Edit time entries (select task)",
 		createOrOpenTask: "Create or open task",
@@ -3039,6 +3053,25 @@ export const en: TranslationTree = {
 			markIncomplete: "Mark incomplete for this date",
 			skipInstance: "Skip instance",
 			unskipInstance: "Unskip instance",
+			completion: {
+				submenu: "Mark complete or skip",
+				submenuCompleteOnly: "Mark complete",
+				completeToday: "Completed today",
+				completeAsScheduled: "Completed on schedule",
+				completeOnDue: "Completed on due date",
+				completeOnPicked: "Completed on (pick date)",
+				markIncomplete: "Mark incomplete",
+				noScheduledDate: "No scheduled date on this task",
+				noDueDate: "No due date on this task",
+				noPickedDate: "No date selected",
+				noCompletedStatus: "No completed status configured",
+				pickDateTitle: "Complete on date",
+				completeFailure: "Failed to update task completion: {message}",
+				clearInstancesConfirmTitle: "Clear recorded instances?",
+				clearInstancesConfirmMessage:
+					"Rescheduling will clear these recorded completed/skipped instances on or after the new date: {dates}. They will no longer be marked complete or skipped. Continue?",
+				clearInstancesConfirmButton: "Reschedule and clear",
+			},
 			quickReminders: {
 				atTime: "At time of event",
 				fiveMinutes: "5 minutes before",
@@ -3280,7 +3313,8 @@ export const en: TranslationTree = {
 			reminderTooltipOne: "1 reminder set (click to manage)",
 			reminderTooltipMany: "{count} reminders set (click to manage)",
 			detailsTooltip: "Task has details",
-			projectTooltip: "This task is used as a project (click to filter subtasks)",
+			projectTooltip: "This task is used as a project (click to show/hide subtasks)",
+			projectIndicatorTooltip: "This task is used as a project",
 			expandSubtasks: "Expand subtasks",
 			collapseSubtasks: "Collapse subtasks",
 			dueToday: "{label}: Today",

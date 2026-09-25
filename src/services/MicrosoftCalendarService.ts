@@ -1,4 +1,5 @@
 import { requestUrl } from "obsidian";
+import { format, parseISO } from "date-fns";
 import TaskNotesPlugin from "../main";
 import { OAuthService } from "./OAuthService";
 import { ICSEvent } from "../types";
@@ -10,7 +11,7 @@ import {
 	RateLimitError,
 	TokenExpiredError,
 } from "./errors";
-import { validateCalendarId, validateEventId, validateRequired } from "./validation";
+import { validateEventId, validateMicrosoftCalendarId, validateRequired } from "./validation";
 import { CalendarProvider, ProviderCalendar } from "./CalendarProvider";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
 import { publishUserNotice } from "../core/userNotices";
@@ -580,9 +581,6 @@ export class MicrosoftCalendarService extends CalendarProvider {
 			start = msEvent.start.dateTime.split("T")[0];
 			end = msEvent.end.dateTime.split("T")[0];
 		} else {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports -- date-fns is lazy-loaded inside Microsoft all-day event conversion.
-			const { format, parseISO } = require("date-fns");
-
 			const startIso = this.ensureUtcDateTime(msEvent.start.dateTime, msEvent.start.timeZone);
 			const endIso = this.ensureUtcDateTime(msEvent.end.dateTime, msEvent.end.timeZone);
 
@@ -874,7 +872,7 @@ export class MicrosoftCalendarService extends CalendarProvider {
 		}
 	): Promise<ICSEvent> {
 		// Validate inputs
-		validateCalendarId(calendarId);
+		validateMicrosoftCalendarId(calendarId);
 		validateEventId(eventId);
 		validateRequired(updates, "updates");
 
@@ -1014,7 +1012,7 @@ export class MicrosoftCalendarService extends CalendarProvider {
 		}
 	): Promise<ICSEvent> {
 		// Validate inputs
-		validateCalendarId(calendarId);
+		validateMicrosoftCalendarId(calendarId);
 		validateRequired(event, "event");
 
 		// Support both 'title' and 'summary' for test compatibility
@@ -1125,7 +1123,7 @@ export class MicrosoftCalendarService extends CalendarProvider {
 	 */
 	async deleteEvent(calendarId: string, eventId: string): Promise<void> {
 		// Validate inputs
-		validateCalendarId(calendarId);
+		validateMicrosoftCalendarId(calendarId);
 		validateEventId(eventId);
 
 		try {
