@@ -2799,6 +2799,7 @@ export const fr: TranslationTree = {
 			unarchive: "Désarchiver",
 			openNote: "Ouvrir la note",
 			openNoteInNewTab: "Ouvrir la note dans un nouvel onglet",
+			duplicateEvent: "Dupliquer l’événement",
 			copyTitle: "Copier le titre de la tâche",
 			quickActions: "Actions rapides",
 			noteActions: "Actions sur la note",
@@ -2923,6 +2924,8 @@ export const fr: TranslationTree = {
 				renameFailure: "Impossible de renommer le fichier",
 				copyPathSuccess: "Chemin du fichier copié dans le presse-papiers",
 				copyUrlSuccess: "URL Obsidian copiée dans le presse-papiers",
+				duplicateEventSuccess: "Événement dupliqué",
+				duplicateEventFailure: "Échec de la duplication de l’événement : {message}",
 				updateRecurrenceFailure: "Impossible de mettre à jour la récurrence : {message}",
 				updateTagsFailed: "Échec de la mise à jour des étiquettes"
 			},

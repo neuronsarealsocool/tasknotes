@@ -2798,6 +2798,7 @@ export const zh: TranslationTree = {
 			unarchive: "取消归档",
 			openNote: "打开笔记",
 			openNoteInNewTab: "在新标签页打开笔记",
+			duplicateEvent: "复制事件",
 			copyTitle: "复制任务标题",
 			quickActions: "快速操作",
 			noteActions: "笔记操作",
@@ -2922,6 +2923,8 @@ export const zh: TranslationTree = {
 				renameFailure: "重命名文件失败",
 				copyPathSuccess: "文件路径已复制到剪贴板",
 				copyUrlSuccess: "Obsidian URL已复制到剪贴板",
+				duplicateEventSuccess: "事件已复制",
+				duplicateEventFailure: "复制事件失败：{message}",
 				updateRecurrenceFailure: "更新任务重复失败：{message}",
 				updateTagsFailed: "更新标签失败"
 			},

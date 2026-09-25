@@ -2799,6 +2799,7 @@ export const ja: TranslationTree = {
 			unarchive: "アーカイブ解除",
 			openNote: "ノートを開く",
 			openNoteInNewTab: "ノートを新しいタブで開く",
+			duplicateEvent: "イベントを複製",
 			copyTitle: "タスクタイトルをコピー",
 			quickActions: "クイックアクション",
 			noteActions: "ノートアクション",
@@ -2923,6 +2924,8 @@ export const ja: TranslationTree = {
 				renameFailure: "ファイルの名前変更に失敗しました",
 				copyPathSuccess: "ファイルパスをクリップボードにコピーしました",
 				copyUrlSuccess: "Obsidian URLをクリップボードにコピーしました",
+				duplicateEventSuccess: "イベントを複製しました",
+				duplicateEventFailure: "イベントを複製できませんでした：{message}",
 				updateRecurrenceFailure: "タスク繰り返しの更新に失敗しました：{message}",
 				updateTagsFailed: "タグの更新に失敗しました"
 			},

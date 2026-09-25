@@ -2783,6 +2783,7 @@ export const ko: TranslationTree = {
 			unarchive: "보관 해제",
 			openNote: "노트 열기",
 			openNoteInNewTab: "새 탭에서 노트 열기",
+			duplicateEvent: "이벤트 복제",
 			copyTitle: "작업 제목 복사",
 			quickActions: "빠른 작업",
 			noteActions: "노트 작업",
@@ -2907,6 +2908,8 @@ export const ko: TranslationTree = {
 				renameFailure: "파일 이름 변경 실패",
 				copyPathSuccess: "파일 경로가 클립보드에 복사되었습니다",
 				copyUrlSuccess: "Obsidian URL이 클립보드에 복사되었습니다",
+				duplicateEventSuccess: "이벤트를 복제했습니다",
+				duplicateEventFailure: "이벤트를 복제하지 못했습니다: {message}",
 				updateRecurrenceFailure: "작업 반복 업데이트 실패: {message}",
 				updateTagsFailed: "태그 업데이트 실패"
 			},

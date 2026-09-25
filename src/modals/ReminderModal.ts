@@ -615,7 +615,7 @@ export class ReminderModal extends Modal {
 	private renderMediaAlertFields(form: HTMLElement): void {
 		const mediaContainer = form.createDiv({ cls: "reminder-modal__media-fields" });
 		const header = mediaContainer.createDiv({ cls: "reminder-modal__media-header" });
-		header.createEl("span", { text: "Media alert" });
+		header.createSpan({ text: "Media alert" });
 		header.createEl("small", { text: "Optional video or audio file from this vault" });
 
 		let videoInput: HTMLInputElement | null = null;

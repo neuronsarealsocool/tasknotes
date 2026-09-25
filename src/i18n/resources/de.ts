@@ -2799,6 +2799,7 @@ export const de: TranslationTree = {
 			unarchive: "Entarchivieren",
 			openNote: "Notiz öffnen",
 			openNoteInNewTab: "Notiz in neuem Tab öffnen",
+			duplicateEvent: "Ereignis duplizieren",
 			copyTitle: "Aufgabentitel kopieren",
 			quickActions: "Schnellaktionen",
 			noteActions: "Notizaktionen",
@@ -2923,6 +2924,8 @@ export const de: TranslationTree = {
 				renameFailure: "Datei konnte nicht umbenannt werden",
 				copyPathSuccess: "Dateipfad in Zwischenablage kopiert",
 				copyUrlSuccess: "Obsidian URL in Zwischenablage kopiert",
+				duplicateEventSuccess: "Ereignis dupliziert",
+				duplicateEventFailure: "Ereignis konnte nicht dupliziert werden: {message}",
 				updateRecurrenceFailure: "Aufgabenwiederholung konnte nicht aktualisiert werden: {message}",
 				updateTagsFailed: "Tags konnten nicht aktualisiert werden"
 			},

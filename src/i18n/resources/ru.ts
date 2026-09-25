@@ -2799,6 +2799,7 @@ export const ru: TranslationTree = {
 			unarchive: "Разархивировать",
 			openNote: "Открыть заметку",
 			openNoteInNewTab: "Открыть заметку в новой вкладке",
+			duplicateEvent: "Дублировать событие",
 			copyTitle: "Копировать название задачи",
 			quickActions: "Быстрые действия",
 			noteActions: "Действия с заметкой",
@@ -2923,6 +2924,8 @@ export const ru: TranslationTree = {
 				renameFailure: "Не удалось переименовать файл",
 				copyPathSuccess: "Путь к файлу скопирован в буфер обмена",
 				copyUrlSuccess: "URL Obsidian скопирован в буфер обмена",
+				duplicateEventSuccess: "Событие продублировано",
+				duplicateEventFailure: "Не удалось продублировать событие: {message}",
 				updateRecurrenceFailure: "Не удалось обновить повторение задачи: {message}",
 				updateTagsFailed: "Не удалось обновить теги"
 			},

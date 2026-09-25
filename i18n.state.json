@@ -7120,6 +7120,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "e348c94b1471359598b2e9201e67a076356603ca"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "99e05153f5597b42f5d4de837838860ee6b7e410"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "25cb3f6edc63f1a9506c6f79b3ff16efbcf57d07"
@@ -7547,6 +7551,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "2b08d7d6a03b2d1088b32188d1a101d8133b415a"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "29021b5cc96da72d470d7dd522e2ad7f56a866ad"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "bdeb207a7127874ae3db7a180eab0a014a6afd14"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -16090,6 +16102,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "c5d2d3ec3d03959244c6fdd41d900c7a738462db"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "93a57d2690a367b3d7112f3785bb4de99254a4d9"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "bf952965dfdf91042cea37f478dede804f625691"
@@ -16517,6 +16533,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "46f0105cf08afd43ed28da8fdc18bd93916053a8"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "79df475d01b9d183b6b3f45dd89458addca6a478"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "b33b7bb551e30291e9eacd10f972923775b88d55"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -25060,6 +25084,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "b57ac19b5847a7d38227963e6d4c79c32a79f3cd"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "5530151ffced7ec232173e7063e2fb5301b10e3a"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "a6a8a0a3836fb097a21f09520d9b562be0f0e433"
@@ -25487,6 +25515,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "efacb59bf4762c0bc1ab35999462e53bae1f2795"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "225bfe15b94d0c5ad0b9857feac14913bd184ad7"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "6aaebd3254fd8efe4f89c7930e3f40b2c22d7fe8"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -34030,6 +34066,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "d9eda291c37e95e3b28e115636c53972d0dd736f"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "1669842fb7ebaad72ce9cadb701121bd7f2ee85a"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "4912b7b1fec53f6ac6364da5d9cbcb49672dcbf2"
@@ -34457,6 +34497,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "4cb3879f01ef06c65fdd82d0b0fe16d2f43e31cb"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "e3d5052d7050e5c51f2c2c1129ac855df1ff3d02"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "86f9d47d71f18b6346ac7ba5671c7f679ba1f2ed"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -43000,6 +43048,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "7db0d0421eb7d591abccbba319beb6faaa27efc6"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "1d724195160bd4c0d5d3230843e310791ef2ac22"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "5a30a1f2c5e52053c13f0f35f658726037b4dabb"
@@ -43427,6 +43479,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "699b21b864fb19fa8ec14c93fa238c29c87e074c"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "4c17a7f8b0cde16e413ff72f134662dad4a54b3a"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "73c00e38bfd9894ff114d3254badc7ec16579253"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -51970,6 +52030,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "4b76b88a46b154793bbf26dd30ec4d6ac670682b"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "93a57d2690a367b3d7112f3785bb4de99254a4d9"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "11dfef95891856ea4b2e3e7cae786df9ad86028d"
@@ -52397,6 +52461,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "c591440f2667fcf85e0b8deeda8698db450171b1"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "79df475d01b9d183b6b3f45dd89458addca6a478"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "deb93b0a0a1097b4b74bcfeacde48b127cdad435"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -60940,6 +61012,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "dddb7932f233ea9ddc299d2e1f032baa1a20591a"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "17ee3e614f66584ba07995d9c1142bc8b98ae37b"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "d92cd361faa8bd0355bf7d43d55786af975ffaf7"
@@ -61367,6 +61443,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "6902aa8a4c0aebce11c4e8b175dbac671b0337fc"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "5e25df89b59f7ef716d5a81d832e5a35d98a0695"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "7db5afb79816c6ac5491434d42c5111191797c02"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",
@@ -69910,6 +69994,10 @@
       "source": "19335b1300633698c4b3754e5e30d81e28d7a6ef",
       "translation": "c78758c2cdc00b0001ade44606396b663c9a97f6"
     },
+    "contextMenus.task.duplicateEvent": {
+      "source": "aaf84e7b3f10b1dd0bb68173e7b135243eb81af2",
+      "translation": "e4b862fdd73d7d67967d38e6f32369757a2e02a3"
+    },
     "contextMenus.task.copyTitle": {
       "source": "a332ed4021bcc545e0652ffabfb86057ca6c0160",
       "translation": "8a8ba5275a9b45a425c1f657e3b2034cf917ecb7"
@@ -70337,6 +70425,14 @@
     "contextMenus.task.notices.copyUrlSuccess": {
       "source": "c22fbaebdf4a8d3babde634d8496653fc8144aec",
       "translation": "78e092cb8f1122a1ad309ef21d7370c739eb8b62"
+    },
+    "contextMenus.task.notices.duplicateEventSuccess": {
+      "source": "64ca9106ae7c9ca904adb94a55bb48828863a13b",
+      "translation": "f08e47ea154448b52ab63b6d9bed3efe0f2d5703"
+    },
+    "contextMenus.task.notices.duplicateEventFailure": {
+      "source": "3cdb91aa5dea94f82fbecd185b2d923edfd48e74",
+      "translation": "55464c1374880e158400b0f9df78705068a6095c"
     },
     "contextMenus.task.notices.updateRecurrenceFailure": {
       "source": "7d0762beccddeeba7e4eb1c008a56ad23aabacf1",

@@ -2801,6 +2801,7 @@ export const pt: TranslationTree = {
 			unarchive: "Desarquivar",
 			openNote: "Abrir nota",
 			openNoteInNewTab: "Abrir nota em uma nova aba",
+			duplicateEvent: "Duplicar evento",
 			copyTitle: "Copiar título da tarefa",
 			quickActions: "Ações rápidas",
 			noteActions: "Ações da nota",
@@ -2925,6 +2926,8 @@ export const pt: TranslationTree = {
 				renameFailure: "Falha ao renomear arquivo",
 				copyPathSuccess: "Caminho do arquivo copiado para a área de transferência",
 				copyUrlSuccess: "URL do Obsidian copiado para a área de transferência",
+				duplicateEventSuccess: "Evento duplicado",
+				duplicateEventFailure: "Falha ao duplicar o evento: {message}",
 				updateRecurrenceFailure: "Falha ao atualizar recorrência da tarefa: {message}",
 				updateTagsFailed: "Falha ao atualizar tags"
 			},

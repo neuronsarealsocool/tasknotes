@@ -2799,6 +2799,7 @@ export const es: TranslationTree = {
 			unarchive: "Desarchivar",
 			openNote: "Abrir nota",
 			openNoteInNewTab: "Abrir nota en una nueva pestaña",
+			duplicateEvent: "Duplicar evento",
 			copyTitle: "Copiar título de tarea",
 			quickActions: "Acciones rápidas",
 			noteActions: "Acciones de nota",
@@ -2923,6 +2924,8 @@ export const es: TranslationTree = {
 				renameFailure: "Error al renombrar archivo",
 				copyPathSuccess: "Ruta de archivo copiada al portapapeles",
 				copyUrlSuccess: "URL de Obsidian copiada al portapapeles",
+				duplicateEventSuccess: "Evento duplicado",
+				duplicateEventFailure: "No se pudo duplicar el evento: {message}",
 				updateRecurrenceFailure: "Error al actualizar recurrencia de tarea: {message}",
 				updateTagsFailed: "No se pudieron actualizar las etiquetas"
 			},
