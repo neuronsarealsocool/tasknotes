@@ -25,6 +25,10 @@ type WorkspaceLeafLike = {
 	};
 };
 
+export interface WorkspaceNavigationOptions {
+	openInNewTab?: boolean;
+}
+
 export class WorkspaceNavigationService {
 	constructor(private plugin: TaskNotesPlugin) {}
 
@@ -42,9 +46,12 @@ export class WorkspaceNavigationService {
 		}
 	}
 
-	async activateView(viewType: string): Promise<WorkspaceLeaf> {
+	async activateView(
+		viewType: string,
+		options: WorkspaceNavigationOptions = {}
+	): Promise<WorkspaceLeaf> {
 		const { workspace } = this.plugin.app;
-		let leaf = this.getLeafOfType(viewType);
+		let leaf = options.openInNewTab ? null : this.getLeafOfType(viewType);
 
 		if (!leaf) {
 			leaf = workspace.getLeaf("tab");
@@ -58,15 +65,21 @@ export class WorkspaceNavigationService {
 		return leaf as WorkspaceLeaf;
 	}
 
-	async activateCalendarView(): Promise<void> {
-		await this.openBasesFileForCommand("open-calendar-view");
+	async activateCalendarView(options: WorkspaceNavigationOptions = {}): Promise<void> {
+		await this.openBasesFileForCommand("open-calendar-view", options);
 	}
 
 	async activateAgendaView(): Promise<WorkspaceLeaf> {
 		return this.activateView(AGENDA_VIEW_TYPE);
 	}
 
-	async activatePomodoroView(): Promise<WorkspaceLeaf> {
+	async activatePomodoroView(
+		options: WorkspaceNavigationOptions = {}
+	): Promise<WorkspaceLeaf> {
+		if (options.openInNewTab) {
+			return this.activateView(POMODORO_VIEW_TYPE, options);
+		}
+
 		if (Platform.isMobile && this.plugin.settings.pomodoroMobileSidebar !== "tab") {
 			const { workspace } = this.plugin.app;
 			let leaf = this.getLeafOfType(POMODORO_VIEW_TYPE);
@@ -95,16 +108,20 @@ export class WorkspaceNavigationService {
 		return this.activateView(POMODORO_VIEW_TYPE);
 	}
 
-	async activatePomodoroStatsView(): Promise<WorkspaceLeaf> {
-		return this.activateView(POMODORO_STATS_VIEW_TYPE);
+	async activatePomodoroStatsView(
+		options: WorkspaceNavigationOptions = {}
+	): Promise<WorkspaceLeaf> {
+		return this.activateView(POMODORO_STATS_VIEW_TYPE, options);
 	}
 
-	async activateStatsView(): Promise<WorkspaceLeaf> {
-		return this.activateView(STATS_VIEW_TYPE);
+	async activateStatsView(options: WorkspaceNavigationOptions = {}): Promise<WorkspaceLeaf> {
+		return this.activateView(STATS_VIEW_TYPE, options);
 	}
 
-	async activateReleaseNotesView(): Promise<WorkspaceLeaf> {
-		return this.activateView(RELEASE_NOTES_VIEW_TYPE);
+	async activateReleaseNotesView(
+		options: WorkspaceNavigationOptions = {}
+	): Promise<WorkspaceLeaf> {
+		return this.activateView(RELEASE_NOTES_VIEW_TYPE, options);
 	}
 
 	private getLeafFilePath(leaf: WorkspaceLeafLike): string | null {
@@ -125,7 +142,10 @@ export class WorkspaceNavigationService {
 		return match;
 	}
 
-	async openBasesFileForCommand(commandId: string): Promise<void> {
+	async openBasesFileForCommand(
+		commandId: string,
+		options: WorkspaceNavigationOptions = {}
+	): Promise<void> {
 		const filePath = this.plugin.settings.commandFileMapping[commandId];
 		if (!filePath) {
 			showNotice(`No file configured for command: ${commandId}`);
@@ -154,7 +174,9 @@ export class WorkspaceNavigationService {
 			return;
 		}
 
-		const existingLeaf = this.findLeafForFile(normalizedPath);
+		const existingLeaf = options.openInNewTab
+			? null
+			: this.findLeafForFile(normalizedPath);
 		if (existingLeaf) {
 			await this.revealLeafReady(existingLeaf);
 			return;

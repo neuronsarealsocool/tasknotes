@@ -14,42 +14,44 @@ export function createTaskNotesCommandDefinitions(
 			id: "open-calendar-view",
 			nameKey: "commands.openCalendarView",
 			callback: async (ctx) => {
-				await ctx.activateCalendarView();
+				await ctx.activateCalendarView({ openInNewTab: true });
 			},
 		},
 		{
 			id: "open-advanced-calendar-view",
 			nameKey: "commands.openAdvancedCalendarView",
 			callback: async (ctx) => {
-				await ctx.openBasesFileForCommand("open-advanced-calendar-view");
+				await ctx.openBasesFileForCommand("open-advanced-calendar-view", {
+					openInNewTab: true,
+				});
 			},
 		},
 		{
 			id: "open-tasks-view",
 			nameKey: "commands.openTasksView",
 			callback: async (ctx) => {
-				await ctx.openBasesFileForCommand("open-tasks-view");
+				await ctx.openBasesFileForCommand("open-tasks-view", { openInNewTab: true });
 			},
 		},
 		{
 			id: "open-agenda-view",
 			nameKey: "commands.openAgendaView",
 			callback: async (ctx) => {
-				await ctx.openBasesFileForCommand("open-agenda-view");
+				await ctx.openBasesFileForCommand("open-agenda-view", { openInNewTab: true });
 			},
 		},
 		{
 			id: "open-pomodoro-view",
 			nameKey: "commands.openPomodoroView",
 			callback: async (ctx) => {
-				await ctx.activatePomodoroView();
+				await ctx.activatePomodoroView({ openInNewTab: true });
 			},
 		},
 		{
 			id: "open-kanban-view",
 			nameKey: "commands.openKanbanView",
 			callback: async (ctx) => {
-				await ctx.openBasesFileForCommand("open-kanban-view");
+				await ctx.openBasesFileForCommand("open-kanban-view", { openInNewTab: true });
 			},
 		},
 		{
@@ -80,21 +82,21 @@ export function createTaskNotesCommandDefinitions(
 			id: "open-pomodoro-stats",
 			nameKey: "commands.openPomodoroStats",
 			callback: async (ctx) => {
-				await ctx.activatePomodoroStatsView();
+				await ctx.activatePomodoroStatsView({ openInNewTab: true });
 			},
 		},
 		{
 			id: "open-statistics",
 			nameKey: "commands.openStatisticsView",
 			callback: async (ctx) => {
-				await ctx.activateStatsView();
+				await ctx.activateStatsView({ openInNewTab: true });
 			},
 		},
 		{
 			id: "create-new-task",
 			nameKey: "commands.createNewTask",
 			callback: (ctx) => {
-				ctx.openTaskCreationModal();
+				ctx.openTaskCreationModal(undefined, { openCreatedTaskInNewTab: true });
 			},
 		},
 		{
@@ -185,7 +187,7 @@ export function createTaskNotesCommandDefinitions(
 			id: "go-to-today",
 			nameKey: "commands.goToTodayNote",
 			callback: async (ctx) => {
-				await ctx.navigateToCurrentDailyNote();
+				await ctx.navigateToCurrentDailyNote({ openInNewTab: true });
 			},
 		},
 		{
@@ -341,7 +343,7 @@ export function createTaskNotesCommandDefinitions(
 			id: "view-release-notes",
 			nameKey: "commands.viewReleaseNotes",
 			callback: async (ctx) => {
-				await ctx.activateReleaseNotesView();
+				await ctx.activateReleaseNotesView({ openInNewTab: true });
 			},
 		},
 		{
@@ -362,14 +364,14 @@ export function createTaskNotesCommandDefinitions(
 			id: "create-or-open-task",
 			nameKey: "commands.createOrOpenTask",
 			callback: async (ctx) => {
-				await ctx.openTaskSelectorWithCreate();
+				await ctx.openTaskSelectorWithCreate({ openInNewTab: true });
 			},
 		},
 		{
 			id: "create-or-open-task-with-time-tracking",
 			nameKey: "commands.createOrOpenTaskWithTracking",
 			callback: async (ctx) => {
-				await ctx.openTaskSelectorWithCreateAndStartTracking();
+				await ctx.openTaskSelectorWithCreateAndStartTracking({ openInNewTab: true });
 			},
 		},
 		{

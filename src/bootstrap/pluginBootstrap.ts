@@ -163,7 +163,7 @@ export function registerRibbonIcons(plugin: TaskNotesPlugin): void {
 		"calendar-days",
 		plugin.i18n.translate("commands.openCalendarView"),
 		async () => {
-			await plugin.activateCalendarView();
+			await plugin.activateCalendarView({ openInNewTab: true });
 		}
 	);
 
@@ -171,7 +171,9 @@ export function registerRibbonIcons(plugin: TaskNotesPlugin): void {
 		"calendar",
 		plugin.i18n.translate("commands.openAdvancedCalendarView"),
 		async () => {
-			await plugin.openBasesFileForCommand("open-advanced-calendar-view");
+			await plugin.openBasesFileForCommand("open-advanced-calendar-view", {
+				openInNewTab: true,
+			});
 		}
 	);
 
@@ -179,31 +181,31 @@ export function registerRibbonIcons(plugin: TaskNotesPlugin): void {
 		"check-square",
 		plugin.i18n.translate("commands.openTasksView"),
 		async () => {
-			await plugin.openBasesFileForCommand("open-tasks-view");
+			await plugin.openBasesFileForCommand("open-tasks-view", { openInNewTab: true });
 		}
 	);
 
 	plugin.addRibbonIcon("list", plugin.i18n.translate("commands.openAgendaView"), async () => {
-		await plugin.openBasesFileForCommand("open-agenda-view");
+		await plugin.openBasesFileForCommand("open-agenda-view", { openInNewTab: true });
 	});
 
 	plugin.addRibbonIcon(
 		"columns-3",
 		plugin.i18n.translate("commands.openKanbanView"),
 		async () => {
-			await plugin.openBasesFileForCommand("open-kanban-view");
+			await plugin.openBasesFileForCommand("open-kanban-view", { openInNewTab: true });
 		}
 	);
 
 	plugin.addRibbonIcon("timer", plugin.i18n.translate("commands.openPomodoroView"), async () => {
-		await plugin.activatePomodoroView();
+		await plugin.activatePomodoroView({ openInNewTab: true });
 	});
 
 	plugin.addRibbonIcon(
 		"bar-chart-3",
 		plugin.i18n.translate("commands.openPomodoroStats"),
 		async () => {
-			await plugin.activatePomodoroStatsView();
+			await plugin.activatePomodoroStatsView({ openInNewTab: true });
 		}
 	);
 
@@ -211,7 +213,7 @@ export function registerRibbonIcons(plugin: TaskNotesPlugin): void {
 		"tasknotes-simple",
 		plugin.i18n.translate("commands.createNewTask"),
 		() => {
-			plugin.openTaskCreationModal();
+			plugin.openTaskCreationModal(undefined, { openCreatedTaskInNewTab: true });
 		}
 	);
 }

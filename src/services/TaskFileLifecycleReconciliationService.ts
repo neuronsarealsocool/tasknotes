@@ -2,6 +2,7 @@ import { TFile, type EventRef } from "obsidian";
 import type TaskNotesPlugin from "../main";
 import { EVENT_TASK_UPDATED, type TaskInfo } from "../types";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
+import { inferInclusiveDateRangeMinutes } from "../utils/naturalLanguageDateRange";
 
 const tasknotesLogger = createTaskNotesLogger({
 	tag: "Services/TaskFileLifecycleReconciliationService",
@@ -15,6 +16,12 @@ type TaskUpdatePayload = {
 	taskInfo?: TaskInfo;
 	updatedTask?: TaskInfo;
 	originalTask?: TaskInfo;
+};
+
+type FileRenamedPayload = {
+	oldPath?: string;
+	newPath?: string;
+	file?: TFile;
 };
 
 const RECONCILED_TASK_FIELDS = [
@@ -81,7 +88,9 @@ export function selectReconciledTaskProperty(
 export class TaskFileLifecycleReconciliationService {
 	private readonly taskSnapshots = new Map<string, TaskInfo>();
 	private taskUpdatedRef: Nullable<EventRef> = null;
+	private fileRenamedRef: Nullable<EventRef> = null;
 	private readonly handlingPaths = new Set<string>();
+	private readonly inferringTimeEstimatePaths = new Set<string>();
 
 	constructor(private readonly plugin: TaskNotesPlugin) {}
 
@@ -93,6 +102,12 @@ export class TaskFileLifecycleReconciliationService {
 				void this.handleTaskUpdatedEvent(payload);
 			}
 		);
+		this.fileRenamedRef = this.plugin.emitter.on(
+			"file-renamed",
+			(payload: FileRenamedPayload) => {
+				void this.handleFileRenamedEvent(payload);
+			}
+		);
 	}
 
 	destroy(): void {
@@ -100,7 +115,12 @@ export class TaskFileLifecycleReconciliationService {
 			this.plugin.emitter.offref(this.taskUpdatedRef);
 			this.taskUpdatedRef = null;
 		}
+		if (this.fileRenamedRef) {
+			this.plugin.emitter.offref(this.fileRenamedRef);
+			this.fileRenamedRef = null;
+		}
 		this.handlingPaths.clear();
+		this.inferringTimeEstimatePaths.clear();
 		this.taskSnapshots.clear();
 	}
 
@@ -124,6 +144,10 @@ export class TaskFileLifecycleReconciliationService {
 
 		if (!originalTask || this.handlingPaths.has(path)) {
 			return;
+		}
+
+		if (originalTask.title !== updatedTask.title) {
+			await this.applyInferredTimeEstimate(updatedTask);
 		}
 
 		const property = selectReconciledTaskProperty(originalTask, updatedTask);
@@ -155,6 +179,62 @@ export class TaskFileLifecycleReconciliationService {
 			});
 		} finally {
 			this.handlingPaths.delete(path);
+		}
+	}
+
+	async handleFileRenamedEvent(payload: FileRenamedPayload): Promise<void> {
+		const file = payload.file;
+		if (!(file instanceof TFile) || file.extension !== "md") {
+			return;
+		}
+
+		if (payload.oldPath) {
+			this.taskSnapshots.delete(payload.oldPath);
+		}
+
+		const task = await this.plugin.cacheManager.getTaskInfo(file.path);
+		if (!task) {
+			return;
+		}
+
+		const renamedTask = this.plugin.settings.storeTitleInFilename
+			? { ...task, title: file.basename }
+			: task;
+		this.taskSnapshots.set(file.path, renamedTask);
+		await this.applyInferredTimeEstimate(renamedTask);
+	}
+
+	private async applyInferredTimeEstimate(task: TaskInfo): Promise<void> {
+		const inferredMinutes = inferInclusiveDateRangeMinutes(
+			task.title,
+			task.scheduled || task.due
+		);
+		if (
+			inferredMinutes === undefined ||
+			task.timeEstimate === inferredMinutes ||
+			this.inferringTimeEstimatePaths.has(task.path)
+		) {
+			return;
+		}
+
+		this.inferringTimeEstimatePaths.add(task.path);
+		try {
+			const updatedTask = await this.plugin.updateTaskProperty(
+				task,
+				"timeEstimate",
+				inferredMinutes,
+				{ silent: true }
+			);
+			this.taskSnapshots.set(updatedTask.path, updatedTask);
+		} catch (error) {
+			tasknotesLogger.warn("Failed to infer time estimate from task note title:", {
+				category: "persistence",
+				operation: "infer-time-estimate-from-note-title",
+				details: { taskPath: task.path },
+				error,
+			});
+		} finally {
+			this.inferringTimeEstimatePaths.delete(task.path);
 		}
 	}
 

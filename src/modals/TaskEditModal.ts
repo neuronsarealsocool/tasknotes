@@ -19,6 +19,7 @@ import { buildTaskEditChangesFromModalState } from "./taskEditChangeState";
 import { buildTaskEditFormStateFromTask } from "./taskEditFormState";
 import { applyTaskEditSubtaskChanges, hasTaskEditSubtaskChanges } from "./taskEditSubtasks";
 import { createTaskNotesLogger } from "../utils/tasknotesLogger";
+import { inferInclusiveDateRangeMinutes } from "../utils/naturalLanguageDateRange";
 
 const tasknotesLogger = createTaskNotesLogger({ tag: "Modals/TaskEditModal" });
 
@@ -67,6 +68,22 @@ export class TaskEditModal extends TaskModal {
 			return;
 		}
 		super.focusTitleInput();
+	}
+
+	protected handleTitleChange(value: string): void {
+		super.handleTitleChange(value);
+		const inferredMinutes = inferInclusiveDateRangeMinutes(
+			value,
+			this.scheduledDate || this.task.scheduled || this.dueDate || this.task.due
+		);
+		if (inferredMinutes === undefined) {
+			return;
+		}
+
+		this.timeEstimate = inferredMinutes;
+		if (this.timeEstimateInput) {
+			this.timeEstimateInput.value = String(inferredMinutes);
+		}
 	}
 
 	async initializeFormData(): Promise<void> {

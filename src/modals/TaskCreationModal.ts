@@ -62,6 +62,7 @@ export interface TaskCreationOptions {
 	prePopulatedValues?: TaskCreationPrepopulatedValues;
 	onTaskCreated?: (task: TaskInfo) => void;
 	creationContext?: "manual-creation" | "modal-inline-creation"; // Folder behavior context
+	openCreatedTaskInNewTab?: boolean;
 }
 
 type OpenTaskAfterCreationMode = TaskNotesPlugin["settings"]["openTaskAfterCreation"];
@@ -722,7 +723,9 @@ export class TaskCreationModal extends TaskModal {
 		file: TFile,
 		options: { createAnother?: boolean }
 	): Promise<void> {
-		const mode = this.plugin.settings.openTaskAfterCreation ?? "none";
+		const mode = this.options.openCreatedTaskInNewTab
+			? "new-tab"
+			: (this.plugin.settings.openTaskAfterCreation ?? "none");
 		if (!shouldOpenCreatedTaskAfterSave(mode, options, Boolean(this.options.onTaskCreated))) {
 			return;
 		}

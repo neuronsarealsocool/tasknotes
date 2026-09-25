@@ -537,14 +537,16 @@ export abstract class TaskModal extends Modal {
 			className: cls,
 			placeholder,
 			value: this.title,
-			onChange: (value) => {
-				this.title = value;
-			},
+			onChange: (value) => this.handleTitleChange(value),
 			attachFocusScrollGuard: (input) => {
 				this.attachTitleFocusScrollGuard(input);
 				this.attachMobileKeyboardScrollGuard(input, { scrollOnFocus: false });
 			},
 		});
+	}
+
+	protected handleTitleChange(value: string): void {
+		this.title = value;
 	}
 
 	protected createActionBar(container: HTMLElement): void {

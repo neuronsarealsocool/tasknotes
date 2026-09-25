@@ -318,7 +318,7 @@ export async function handleCalendarTaskClick(
 		if (action === "edit") {
 			await editTask();
 		} else if (action === "openNote") {
-			openNote();
+			openNote(true);
 		}
 	};
 

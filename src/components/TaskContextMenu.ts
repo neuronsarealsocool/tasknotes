@@ -1,7 +1,7 @@
 import { Menu, Notice, Platform, TFile, type MenuItem, type TAbstractFile } from "obsidian";
 import type { OccurrenceMaterializationMode, OccurrenceNextTrigger } from "@tasknotes/model";
 import TaskNotesPlugin from "../main";
-import { TaskDependency, TaskInfo } from "../types";
+import { TaskCreationData, TaskDependency, TaskInfo } from "../types";
 import { formatDateForStorage } from "../utils/dateUtils";
 import { ReminderModal } from "../modals/ReminderModal";
 import {
@@ -148,6 +148,50 @@ export interface TaskContextMenuOptions {
 	targetDate: Date;
 	onUpdate?: () => void;
 	promoteOccurrenceControls?: boolean;
+}
+
+function cloneFrontmatterValue(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(cloneFrontmatterValue);
+	}
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value).map(([key, entry]) => [key, cloneFrontmatterValue(entry)])
+		);
+	}
+	return value;
+}
+
+export function buildDuplicateTaskData(task: TaskInfo): TaskCreationData {
+	return {
+		title: `${task.title} duplicate`,
+		status: task.status,
+		priority: task.priority,
+		due: task.due,
+		scheduled: task.scheduled,
+		tags: task.tags ? [...task.tags] : undefined,
+		contexts: task.contexts ? [...task.contexts] : undefined,
+		projects: task.projects ? [...task.projects] : undefined,
+		recurrence: task.recurrence,
+		recurrence_anchor: task.recurrence_anchor,
+		occurrence_materialization: task.occurrence_materialization,
+		occurrence_next_trigger: task.occurrence_next_trigger,
+		occurrence_template: task.occurrence_template,
+		occurrence_past_horizon: task.occurrence_past_horizon,
+		occurrence_future_horizon: task.occurrence_future_horizon,
+		timeEstimate: task.timeEstimate,
+		reminders: task.reminders?.map((reminder, index) => ({
+			...reminder,
+			id: `rem_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 11)}`,
+			alert: reminder.alert ? { ...reminder.alert } : undefined,
+		})),
+		blockedBy: task.blockedBy?.map((dependency) => ({ ...dependency })),
+		details: task.details,
+		customFrontmatter: task.customProperties
+			? (cloneFrontmatterValue(task.customProperties) as Record<string, unknown>)
+			: undefined,
+		creationContext: "manual-creation",
+	};
 }
 
 export class TaskContextMenu {
@@ -469,6 +513,32 @@ export class TaskContextMenu {
 				void plugin.openTaskEditModal(task, () => {
 					this.options.onUpdate?.();
 				});
+			});
+		});
+
+		this.menu.addItem((item) => {
+			item.setTitle(this.t("contextMenus.task.duplicateEvent"));
+			item.setIcon("copy-plus");
+			item.onClick(async () => {
+				try {
+					await plugin.taskService.createTask(buildDuplicateTaskData(task), {
+						applyDefaults: false,
+						applyTemplate: false,
+					});
+					new Notice(this.t("contextMenus.task.notices.duplicateEventSuccess"));
+					this.options.onUpdate?.();
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					tasknotesLogger.error("Failed to duplicate event:", {
+						category: "persistence",
+						operation: "duplicate-calendar-event",
+						details: { taskPath: task.path },
+						error,
+					});
+					new Notice(
+						this.t("contextMenus.task.notices.duplicateEventFailure", { message })
+					);
+				}
 			});
 		});
 

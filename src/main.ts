@@ -100,6 +100,7 @@ import {
 import { startDateChangeDetection } from "./bootstrap/dateChangeDetection";
 import { createTaskNotesLogger } from "./utils/tasknotesLogger";
 import { TASKNOTES_RUNTIME_LIFECYCLE_RAW_EVENTS } from "./api/runtime-api";
+import type { WorkspaceNavigationOptions } from "./ui/WorkspaceNavigationService";
 import {
 	createTaskNotesPerformanceProfiler,
 	TaskNotesPerformanceProfiler,
@@ -791,36 +792,39 @@ export default class TaskNotesPlugin extends Plugin {
 	}
 
 	// Helper method to create or activate a view of specific type
-	async activateView(viewType: string) {
-		return this.workspaceNavigationService.activateView(viewType);
+	async activateView(viewType: string, options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activateView(viewType, options);
 	}
 
-	async activateCalendarView() {
-		return this.workspaceNavigationService.activateCalendarView();
+	async activateCalendarView(options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activateCalendarView(options);
 	}
 
 	async activateAgendaView() {
 		return this.workspaceNavigationService.activateAgendaView();
 	}
 
-	async activatePomodoroView() {
-		return this.workspaceNavigationService.activatePomodoroView();
+	async activatePomodoroView(options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activatePomodoroView(options);
 	}
 
-	async activatePomodoroStatsView() {
-		return this.workspaceNavigationService.activatePomodoroStatsView();
+	async activatePomodoroStatsView(options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activatePomodoroStatsView(options);
 	}
 
-	async activateStatsView() {
-		return this.workspaceNavigationService.activateStatsView();
+	async activateStatsView(options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activateStatsView(options);
 	}
 
-	async activateReleaseNotesView() {
-		return this.workspaceNavigationService.activateReleaseNotesView();
+	async activateReleaseNotesView(options: WorkspaceNavigationOptions = {}) {
+		return this.workspaceNavigationService.activateReleaseNotesView(options);
 	}
 
-	async openBasesFileForCommand(commandId: string): Promise<void> {
-		await this.workspaceNavigationService.openBasesFileForCommand(commandId);
+	async openBasesFileForCommand(
+		commandId: string,
+		options: WorkspaceNavigationOptions = {}
+	): Promise<void> {
+		await this.workspaceNavigationService.openBasesFileForCommand(commandId, options);
 	}
 
 	/**
@@ -984,14 +988,20 @@ export default class TaskNotesPlugin extends Plugin {
 		return this.getLeafOfType(MINI_CALENDAR_VIEW_TYPE);
 	}
 
-	async navigateToCurrentDailyNote() {
+	async navigateToCurrentDailyNote(options: { openInNewTab?: boolean } = {}) {
 		// Fix for issue #1223: Use getTodayLocal() to get the correct local calendar date
 		// instead of new Date() which would be incorrectly converted by convertUTCToLocalCalendarDate()
 		const date = getTodayLocal();
-		await this.navigateToDailyNote(date, { isAlreadyLocal: true });
+		await this.navigateToDailyNote(date, {
+			isAlreadyLocal: true,
+			openInNewTab: options.openInNewTab,
+		});
 	}
 
-	async navigateToDailyNote(date: Date, options?: { isAlreadyLocal?: boolean }) {
+	async navigateToDailyNote(
+		date: Date,
+		options?: { isAlreadyLocal?: boolean; openInNewTab?: boolean }
+	) {
 		try {
 			// Check if Daily Notes plugin is enabled
 			if (!appHasDailyNotesPluginLoaded()) {
@@ -1034,7 +1044,9 @@ export default class TaskNotesPlugin extends Plugin {
 
 			// Open the daily note
 			if (dailyNote) {
-				await this.app.workspace.getLeaf(false).openFile(dailyNote);
+				await this.app.workspace
+					.getLeaf(options?.openInNewTab ? "tab" : false)
+					.openFile(dailyNote);
 
 				// If we created a new daily note, refresh the cache to ensure it shows up in views
 				if (noteWasCreated) {
@@ -1182,12 +1194,16 @@ export default class TaskNotesPlugin extends Plugin {
 		}
 	}
 
-	openTaskCreationModal(prePopulatedValues?: Partial<TaskInfo>) {
+	openTaskCreationModal(
+		prePopulatedValues?: Partial<TaskInfo>,
+		options: { openCreatedTaskInNewTab?: boolean } = {}
+	) {
 		new TaskCreationModal(this.app, this, {
 			prePopulatedValues: this.applyParentNoteProjectDefault(
 				prePopulatedValues,
 				"task-creation"
 			),
+			openCreatedTaskInNewTab: options.openCreatedTaskInNewTab,
 		}).open();
 	}
 
@@ -1255,12 +1271,14 @@ export default class TaskNotesPlugin extends Plugin {
 	 * Open the task selector with create modal.
 	 * This modal allows users to either select an existing task or create a new one via NLP.
 	 */
-	async openTaskSelectorWithCreate(): Promise<void> {
-		await this.taskActionCoordinator.openTaskSelectorWithCreate();
+	async openTaskSelectorWithCreate(options: { openInNewTab?: boolean } = {}): Promise<void> {
+		await this.taskActionCoordinator.openTaskSelectorWithCreate(options);
 	}
 
-	async openTaskSelectorWithCreateAndStartTracking(): Promise<void> {
-		await this.taskActionCoordinator.openTaskSelectorWithCreateAndStartTracking();
+	async openTaskSelectorWithCreateAndStartTracking(
+		options: { openInNewTab?: boolean } = {}
+	): Promise<void> {
+		await this.taskActionCoordinator.openTaskSelectorWithCreateAndStartTracking(options);
 	}
 
 	async rolloverOverdueScheduledTasks(): Promise<void> {

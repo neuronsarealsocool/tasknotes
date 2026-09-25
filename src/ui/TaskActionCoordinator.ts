@@ -16,25 +16,27 @@ const tasknotesLogger = createTaskNotesLogger({ tag: "Services/TaskActionCoordin
 export class TaskActionCoordinator {
 	constructor(private plugin: TaskNotesPlugin) {}
 
-	private async openTaskFile(task: TaskInfo): Promise<void> {
+	private async openTaskFile(task: TaskInfo, openInNewTab = false): Promise<void> {
 		const file = this.plugin.app.vault.getAbstractFileByPath(task.path);
 		if (file instanceof TFile) {
-			await this.plugin.app.workspace.getLeaf(false).openFile(file);
+			await this.plugin.app.workspace.getLeaf(openInNewTab ? "tab" : false).openFile(file);
 		}
 	}
 
-	async openTaskSelectorWithCreate(): Promise<void> {
+	async openTaskSelectorWithCreate(options: { openInNewTab?: boolean } = {}): Promise<void> {
 		const { openTaskSelectorWithCreate } = await import(
 			"../modals/TaskSelectorWithCreateModal"
 		);
 		const result = await openTaskSelectorWithCreate(this.plugin);
 
 		if (result.type === "selected" || result.type === "created") {
-			await this.openTaskFile(result.task);
+			await this.openTaskFile(result.task, options.openInNewTab);
 		}
 	}
 
-	async openTaskSelectorWithCreateAndStartTracking(): Promise<void> {
+	async openTaskSelectorWithCreateAndStartTracking(
+		options: { openInNewTab?: boolean } = {}
+	): Promise<void> {
 		const { openTaskSelectorWithCreate } = await import(
 			"../modals/TaskSelectorWithCreateModal"
 		);
@@ -48,7 +50,7 @@ export class TaskActionCoordinator {
 			} catch {
 				// startTimeTracking shows the user-facing notice; keep create/open behavior intact.
 			} finally {
-				await this.openTaskFile(taskToOpen);
+				await this.openTaskFile(taskToOpen, options.openInNewTab);
 			}
 		}
 	}
